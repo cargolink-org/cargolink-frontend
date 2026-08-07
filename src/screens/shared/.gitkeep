@@ -1,0 +1,4 @@
+Reserved for screens/components shared across ShipperStack and
+TransporterStack (e.g. a common cargo-details view). Intentionally empty
+as of Task A.1 — each stack still declares its own screens independently;
+nothing has needed to move here yet.

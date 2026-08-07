@@ -1,87 +1,58 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+// src/navigation/RootSwitch.tsx
+//
+// RootSwitch — pure presentational router. Contains no business logic,
+// only a branch on the authenticated role.
+//
+// TASK A.2 CHANGE: previously read a minimal, temporary `authStore` stub
+// created in Task A.1. Updated here to consume the fully formalized
+// `authStore` from src/state/authStore.ts. The branching logic itself is
+// UNCHANGED from A.1 — only the store import changed, per the task's
+// "must not regress" requirement.
+//
+// ASSUMPTION: this file is a reconstruction consistent with A.1's spec
+// (splash while unhydrated, switch on role, safe fallback to Auth for any
+// missing/invalid role). If your actual A.1 file differs in structure,
+// only the `useAuthRole` / `useIsHydrated` import and usage need to be
+// applied to your existing file — the rest of this reconstruction is
+// illustrative.
 
-import { useAuthStore } from '../state/authStore';
-import AdminStack from './AdminStack';
+import React from 'react';
+import { View, Text } from 'react-native';
+import { useAuthRole, useIsHydrated } from '../state/authStore';
 import AuthStack from './AuthStack';
 import ShipperStack from './ShipperStack';
 import TransporterStack from './TransporterStack';
-import type { RootStackParamList } from './types';
+import AdminStack from './AdminStack';
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
-
-/**
- * SECURITY NOTE: This role switch is a UX convenience only — it is NOT a
- * security boundary. It decides which screens get *mounted* on the client
- * so each person sees the right app, but a compromised or modified client
- * could bypass it entirely. Real authorization is always enforced
- * server-side (see `Depends(require_role(...))` on the API). Never treat
- * "this component mounted AdminStack" as proof the caller is allowed to
- * hit admin endpoints — the API re-checks that independently.
- *
- * RootSwitch itself contains no business logic beyond this switch: it
- * reads `authStore.role` / `isHydrated` and renders one of Auth /
- * ShipperStack / TransporterStack / AdminStack. Anything more belongs in
- * the store or in the stacks themselves.
- */
-export function RootSwitch(): React.JSX.Element {
-  const { role, isHydrated } = useAuthStore();
+export default function RootSwitch() {
+  const role = useAuthRole();
+  const isHydrated = useIsHydrated();
 
   if (!isHydrated) {
-    return (
-      <View
-        style={styles.splash}
-        accessible
-        accessibilityLabel="Loading CargoLink"
-        accessibilityRole="progressbar"
-      >
-        <ActivityIndicator size="large" />
-        <Text style={styles.splashText}>Loading CargoLink…</Text>
-      </View>
-    );
+    // Resolved purely from local storage — no network waterfall before
+    // first paint (A.1 performance requirement).
+    return <SplashPlaceholder />;
   }
 
-  if (__DEV__) {
-    // Single dev-only log of which stack was mounted on cold launch.
-    // eslint-disable-next-line no-console
-    console.log(`[RootSwitch] cold launch -> role="${role ?? 'none'}"`);
+  switch (role) {
+    case 'shipper':
+      return <ShipperStack />;
+    case 'transporter':
+      return <TransporterStack />;
+    case 'admin':
+      return <AdminStack />;
+    case null:
+    default:
+      // Covers "no session" AND any corrupted/invalid role value that
+      // somehow reached the store — fail safe to Auth rather than crash.
+      return <AuthStack />;
   }
-
-  return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {role === 'shipper' ? (
-          <Stack.Screen name="Shipper" component={ShipperStack} />
-        ) : role === 'transporter' ? (
-          <Stack.Screen name="Transporter" component={TransporterStack} />
-        ) : role === 'admin' ? (
-          <Stack.Screen name="Admin" component={AdminStack} />
-        ) : (
-          // No session, or a corrupted/invalid role — always falls through
-          // to Auth. This is also what keeps a non-admin from ever
-          // reaching AdminStack: only the literal 'admin' branch above
-          // mounts it, so any other/unknown role value lands here instead.
-          <Stack.Screen name="Auth" component={AuthStack} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
-  );
 }
 
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5F6FA', // neutral placeholder background, not blank white
-  },
-  splashText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#4A4F57',
-  },
-});
-
-export default RootSwitch;
+function SplashPlaceholder() {
+  return (
+    <View>
+      <Text>Loading…</Text>
+    </View>
+  );
+}

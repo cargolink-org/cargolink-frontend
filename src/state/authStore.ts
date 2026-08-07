@@ -1,84 +1,105 @@
-// -----------------------------------------------------------------------------
-// STUB — Task A.1 (RootSwitch scaffolding) only.
+// src/state/authStore.ts
 //
-// This exists purely so RootSwitch has a concrete, typed shape to read and
-// can be built/tested before real auth exists. It reads NOTHING from real
-// secure storage and makes NO network calls.
+// authStore — session/role/auth state. This formalizes the minimal stub
+// introduced in Task A.1 into its full intended shape. RootSwitch (A.1)
+// has been updated to consume this store directly (see navigation/RootSwitch.tsx);
+// its branching logic is unchanged from A.1.
 //
-// TODO(A.2): Replace with the real store (Zustand/Redux Toolkit), wired to
-// `secureStorage.ts` (Task B.2) and eventually `POST /auth/otp/verify` once
-// the OpenAPI contract is frozen (Week 2). Do not build further app logic
-// on top of this file expecting it to be the final shape.
-// -----------------------------------------------------------------------------
+// SECURITY (see Task A.2 spec, "Security" section):
+//   `token` is held in memory only. It is NEVER written to persisted
+//   storage. Only `role` and `isNewUser` are persisted below, via an
+//   explicit `partialize`. Real token persistence is the exclusive
+//   responsibility of `services/secureStorage.ts` (Task B.2) — that
+//   service does not exist yet, so nothing in this file should be treated
+//   as the source of truth for tokens once B.2 lands.
+//
+// ASSUMPTION: this file uses @react-native-async-storage/async-storage as
+// the persistence backend for the two non-sensitive fields. If your repo
+// uses a different storage primitive (MMKV, etc.), swap the `storage`
+// option below — the `partialize` contract (never persist `token`) must
+// be preserved regardless of backend.
 
-import { useEffect, useState } from 'react';
+import { create } from 'zustand';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import type { Role } from './types';
 
-export type UserRole = 'shipper' | 'transporter' | 'admin';
-
-export interface AuthState {
-  role: UserRole | null;
+interface AuthState {
+  role: Role;
+  /** In-memory only — see SECURITY note above. Never persisted. */
   token: string | null;
   isHydrated: boolean;
+  isNewUser: boolean;
+
+  setSession: (params: { role: Role; token: string | null; isNewUser?: boolean }) => void;
+  clearSession: () => void;
+  setHydrated: (hydrated: boolean) => void;
+  setIsNewUser: (isNewUser: boolean) => void;
 }
 
-const initialAuthState: AuthState = {
-  role: null,
-  token: null,
+const initialState = {
+  role: null as Role,
+  token: null as string | null,
   isHydrated: false,
+  isNewUser: false,
 };
 
-/**
- * Edit this constant during manual development to exercise each
- * RootSwitch branch (Auth / Shipper / Transporter / Admin). Leave it
- * `null` for the "logged out" case.
- *
- *   const MOCK_SESSION = { role: 'shipper' as UserRole, token: 'mock-token' };
- */
-const MOCK_SESSION: { role: UserRole | null; token: string | null } | null = null;
+const asyncStorageAdapter: StateStorage = {
+  getItem: async (name) => {
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+    return AsyncStorage.getItem(name);
+  },
+  setItem: async (name, value) => {
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+    await AsyncStorage.setItem(name, value);
+  },
+  removeItem: async (name) => {
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+    await AsyncStorage.removeItem(name);
+  },
+};
 
-function isValidRole(value: unknown): value is UserRole {
-  return value === 'shipper' || value === 'transporter' || value === 'admin';
-}
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      ...initialState,
 
-/**
- * Simulates an async storage read with no real I/O and no network calls,
- * so the splash → route decision still resolves asynchronously the way it
- * will once B.2's real secureStorage read lands.
- */
-async function readStubbedSession(): Promise<{ role: UserRole | null; token: string | null }> {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(MOCK_SESSION ?? { role: null, token: null }), 0);
-  });
-}
+      setSession: ({ role, token, isNewUser }) =>
+        set({
+          role,
+          token,
+          isNewUser: isNewUser ?? false,
+        }),
 
-export function useAuthStore(): AuthState {
-  const [state, setState] = useState<AuthState>(initialAuthState);
+      // Logout: clear everything except isHydrated, which stays true —
+      // we've already resolved "no session" and shouldn't re-show splash.
+      clearSession: () =>
+        set({
+          ...initialState,
+          isHydrated: true,
+        }),
 
-  useEffect(() => {
-    let cancelled = false;
+      setHydrated: (hydrated) => set({ isHydrated: hydrated }),
 
-    readStubbedSession()
-      .then((session) => {
-        if (cancelled) return;
+      setIsNewUser: (isNewUser) => set({ isNewUser }),
+    }),
+    {
+      name: 'cargolink-auth-store',
+      storage: createJSONStorage(() => asyncStorageAdapter),
+      // CRITICAL: only these two non-sensitive fields are ever persisted.
+      // `token` is deliberately omitted — see SECURITY note at top of file.
+      partialize: (state) => ({
+        role: state.role,
+        isNewUser: state.isNewUser,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated(true);
+      },
+    }
+  )
+);
 
-        // A corrupted/unreadable/invalid-role session is treated as no
-        // session — never crash the app here.
-        if (!session || !isValidRole(session.role) || !session.token) {
-          setState({ role: null, token: null, isHydrated: true });
-          return;
-        }
-
-        setState({ role: session.role, token: session.token, isHydrated: true });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setState({ role: null, token: null, isHydrated: true });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return state;
-}
+// Fine-grained selector hooks (selective-subscription requirement).
+export const useAuthRole = () => useAuthStore((s) => s.role);
+export const useAuthToken = () => useAuthStore((s) => s.token);
+export const useIsHydrated = () => useAuthStore((s) => s.isHydrated);
+export const useIsNewUser = () => useAuthStore((s) => s.isNewUser);

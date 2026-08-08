@@ -1,53 +1,28 @@
-import type { NavigatorScreenParams } from '@react-navigation/native';
+/**
+ * Typed navigation param lists.
+ *
+ * This extends the navigation types established in Task A.1 with the Auth
+ * stack's two real screens (Task B.1). `RootStackParamList` /
+ * `ShipperStackParamList` / `TransporterStackParamList` /
+ * `AdminStackParamList` are assumed to already exist from A.1 and are not
+ * redefined here to avoid clobbering that work — only the Auth-specific
+ * additions are shown.
+ */
 
-// ---------------------------------------------------------------------------
-// Auth Stack
-// ---------------------------------------------------------------------------
 export type AuthStackParamList = {
-  AuthPlaceholder: undefined;
+  PhoneEntry: undefined;
+  /** OTP screen requires the phone number it's verifying an OTP for. */
+  OtpEntry: { phone: string };
 };
 
-// ---------------------------------------------------------------------------
-// Shipper Stack
-// Shippers post cargo and need visibility into matching/tracking/documents.
-// Later clusters add more tabs here (e.g. PostCargo, Tracking, Documents).
-// ---------------------------------------------------------------------------
-export type ShipperStackParamList = {
-  ShipperHome: undefined;
-};
-
-// ---------------------------------------------------------------------------
-// Transporter Stack
-// Transporters accept loads, upload compliance documents, stream location.
-// Later clusters add more tabs here (e.g. Loads, Compliance, LiveTracking).
-// ---------------------------------------------------------------------------
-export type TransporterStackParamList = {
-  TransporterHome: undefined;
-};
-
-// ---------------------------------------------------------------------------
-// Admin Stack — reachable only when authStore.role === 'admin'
-// ---------------------------------------------------------------------------
-export type AdminStackParamList = {
-  AdminHome: undefined;
-};
-
-// ---------------------------------------------------------------------------
-// Root
-// RootSwitch mounts exactly one of these at a time, based on authStore.role.
-// ---------------------------------------------------------------------------
+/**
+ * Root-level param list. `Auth` now points at the real `AuthStackParamList`
+ * (previously a single placeholder route in A.1). `Shipper`/`Transporter`/
+ * `Admin` remain screen-stack entry points owned by later clusters.
+ */
 export type RootStackParamList = {
-  Auth: NavigatorScreenParams<AuthStackParamList>;
-  Shipper: NavigatorScreenParams<ShipperStackParamList>;
-  Transporter: NavigatorScreenParams<TransporterStackParamList>;
-  Admin: NavigatorScreenParams<AdminStackParamList>;
+  Auth: undefined;
+  Shipper: undefined;
+  Transporter: undefined;
+  Admin: undefined;
 };
-
-// Lets every useNavigation()/navigate() call in the app be typed against
-// RootStackParamList without re-importing it everywhere.
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace ReactNavigation {
-    interface RootParamList extends RootStackParamList {}
-  }
-}

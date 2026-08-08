@@ -1,27 +1,15 @@
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-
-import { TransporterHomeScreen } from '../screens/transporter/TransporterHomeScreen';
-import type { TransporterStackParamList } from './types';
-
-const Tab = createBottomTabNavigator<TransporterStackParamList>();
+import { View, Text } from 'react-native';
 
 /**
- * Owns its own tab navigator, fully independent of ShipperStack. Later
- * clusters add more transporter-specific tabs here (loads, compliance
- * documents, live tracking) — do not fold shipper screens or role
- * conditionals into this stack instead.
+ * Placeholder scaffold carried over unchanged from Task A.1. Real
+ * transporter screens are wired in later clusters, not part of Task B.1's
+ * scope. Included here only so RootSwitch.tsx compiles standalone.
  */
-export function TransporterStack(): React.JSX.Element {
+export default function TransporterStack() {
   return (
-    <Tab.Navigator>
-      <Tab.Screen
-        name="TransporterHome"
-        component={TransporterHomeScreen}
-        options={{ title: 'Home' }}
-      />
-    </Tab.Navigator>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <Text>Transporter stack placeholder (A.1)</Text>
+    </View>
   );
 }
-
-export default TransporterStack;

@@ -1,85 +1,78 @@
 import { create } from 'zustand';
-import type { AuthUser, SessionTokens, UserRole } from './types';
+import * as secureStorage from '../services/secureStorage';
 
 /**
- * authStore — session/role management.
- *
- * Reproduced here consistent with the store formalized in Task A.2, whose
- * critical, non-negotiable constraint carries forward unchanged:
- *
- *   TOKENS ARE HELD IN MEMORY ONLY. They are never written through any
- *   persistence middleware (no `zustand/persist`, no AsyncStorage). Task
- *   B.2 introduces `expo-secure-store` for cross-restart persistence; until
- *   then (and even after, for the in-memory working copy), this store must
- *   not be the thing that writes tokens to disk.
- *
- * Task B.1 is the first consumer that actually calls `setSession`,
- * `setIsNewUser`, and `setHydrated` from real screen code (Phone/Otp entry).
+ * ASSUMPTION FLAG: I don't have A.2's actual authStore.ts, so this assumes
+ * zustand (chosen because api/client.ts's interceptors run outside the
+ * React tree and need a synchronous getState() — the cleanest fit without
+ * extra wiring). If A.2 actually used Redux/Context/something else, port
+ * the fields and actions below onto that instead of swapping libraries.
  */
 
+export interface AuthUser {
+  id: string;
+  phone: string;
+  // extend with whatever B.1/A.2 actually put on the user object
+}
+
 interface AuthState {
-  user: AuthUser | null;
   token: string | null;
   refreshToken: string | null;
-  role: UserRole | null;
+  user: AuthUser | null;
   isAuthenticated: boolean;
-  /** True immediately after a first-time `verify` response indicates a new user. */
-  isNewUser: boolean;
-  /** Gates routing decisions in RootSwitch until an initial session check resolves. */
+  /** True once secureStorage has been checked on boot. RootSwitch's cold-launch check gates on this. */
   isHydrated: boolean;
-  /** Last auth-flow error, surfaced by screens; cleared on next attempt. */
-  error: string | null;
+  /** Set when logout() was forced by an expired refresh token, so the Auth stack can show a message. */
+  logoutReason: 'expired' | null;
 
-  setSession: (params: { user: AuthUser; tokens: SessionTokens; isNewUser: boolean }) => void;
-  setIsNewUser: (isNewUser: boolean) => void;
-  setHydrated: (hydrated: boolean) => void;
-  setAuthError: (error: string | null) => void;
-  clearSession: () => void;
+  hydrate: () => Promise<void>;
+  setSession: (token: string, refreshToken: string, user: AuthUser) => void;
+  setAccessToken: (token: string) => void;
+  logout: (reason?: 'expired' | null) => Promise<void>;
+  clearLogoutReason: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
   token: null,
   refreshToken: null,
-  role: null,
+  user: null,
   isAuthenticated: false,
-  isNewUser: false,
   isHydrated: false,
-  error: null,
+  logoutReason: null,
 
-  setSession: ({ user, tokens, isNewUser }) =>
+  // Called once, as early as possible in App.tsx. Replaces A.1's stubbed
+  // session check with a real read from secure storage.
+  hydrate: async () => {
+    const { token, refreshToken } = await secureStorage.getTokens();
     set({
-      user,
-      role: user.role,
-      token: tokens.token,
-      refreshToken: tokens.refreshToken,
-      isAuthenticated: true,
-      isNewUser,
-      error: null,
-    }),
+      token,
+      refreshToken,
+      isAuthenticated: Boolean(token && refreshToken),
+      isHydrated: true,
+    });
+  },
 
-  setIsNewUser: (isNewUser) => set({ isNewUser }),
+  // Called from auth.ts's verifyOtp() on successful login, AFTER tokens
+  // have already been written to secure storage.
+  setSession: (token, refreshToken, user) => {
+    set({ token, refreshToken, user, isAuthenticated: true, logoutReason: null });
+  },
 
-  setHydrated: (hydrated) => set({ isHydrated: hydrated }),
+  // Called after a successful POST /auth/refresh — only the access token changes.
+  setAccessToken: (token) => set({ token }),
 
-  setAuthError: (error) => set({ error }),
-
-  clearSession: () =>
+  // Clears secure storage AND in-memory state. Used both for a normal
+  // user-initiated logout and for the forced logout on refresh failure.
+  logout: async (reason = null) => {
+    await secureStorage.clearTokens();
     set({
-      user: null,
       token: null,
       refreshToken: null,
-      role: null,
+      user: null,
       isAuthenticated: false,
-      isNewUser: false,
-      error: null,
-    }),
-}));
+      logoutReason: reason,
+    });
+  },
 
-// Fine-grained selector hooks (mirrors the trackingStore convention from A.2
-// of preferring selectors over subscribing to the whole store where a screen
-// only needs one field).
-export const useAuthRole = () => useAuthStore((s) => s.role);
-export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated);
-export const useIsHydrated = () => useAuthStore((s) => s.isHydrated);
-export const useAuthError = () => useAuthStore((s) => s.error);
+  clearLogoutReason: () => set({ logoutReason: null }),
+}));

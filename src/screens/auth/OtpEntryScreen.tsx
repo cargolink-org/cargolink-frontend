@@ -1,141 +1,124 @@
-import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import OtpEntryScreen from '../../../src/screens/auth/OtpEntryScreen';
-import * as authApi from '../../../src/api/auth';
-import { useAuthStore } from '../../../src/state/authStore';
+import React, { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { requestOtp, verifyOtp } from '../../api/auth';
+import OtpInput from '../../components/OtpInput';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { otpSchema } from '../../validation/authSchema';
+import type { AuthStackParamList } from '../../navigation/types';
 
-jest.mock('../../../src/api/auth', () => ({
-  requestOtp: jest.fn(),
-  verifyOtp: jest.fn(),
-  toSessionTokens: jest.fn((res) => ({ token: res.token, refreshToken: res.refresh_token })),
-}));
+type Props = NativeStackScreenProps<AuthStackParamList, 'OtpEntry'>;
 
-function renderScreen(phone = '9876543210') {
-  const navigation = { navigate: jest.fn() } as any;
-  const route = { params: { phone } } as any;
-  const utils = render(<OtpEntryScreen navigation={navigation} route={route} />);
-  return { ...utils, navigation };
+const RESEND_COOLDOWN_SECONDS = 30;
+
+function formatPhone(phone: string) {
+  return phone.length === 10 ? `${phone.slice(0, 5)} ${phone.slice(5)}` : phone;
 }
 
-function typeOtp(getByTestId: any, digits: string) {
-  digits.split('').forEach((digit, i) => {
-    fireEvent.changeText(getByTestId(`otp-digit-${i}`), digit);
-  });
-}
+export default function OtpEntryScreen({ route }: Props) {
+  const { phone } = route.params;
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
-describe('OtpEntryScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    act(() => {
-      useAuthStore.getState().clearSession();
-    });
-  });
+  useEffect(() => {
+    if (cooldown <= 0) return;
 
-  it('renders 6 otp digit boxes and the masked phone subtitle', () => {
-    const { getByTestId, getByText } = renderScreen('9876543210');
-    for (let i = 0; i < 6; i++) {
-      expect(getByTestId(`otp-digit-${i}`)).toBeTruthy();
+    const timer = setTimeout(() => {
+      setCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const submitOtp = async (value: string) => {
+    const result = otpSchema.safeParse({ otp: value });
+    if (!result.success || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await verifyOtp({ phone, otp: result.data.otp });
+    } catch (submitError) {
+      setOtp('');
+      setError(getErrorMessage(submitError));
+    } finally {
+      setIsSubmitting(false);
     }
-    expect(getByText(/98765 43210/)).toBeTruthy();
-  });
+  };
 
-  it('auto-submits and calls verifyOtp once all 6 digits are entered', async () => {
-    (authApi.verifyOtp as jest.Mock).mockResolvedValueOnce({
-      token: 'access-token',
-      refresh_token: 'refresh-token',
-      user: { id: 'u1', role: 'shipper', phone: '9876543210', name: 'Test User' },
-      is_new_user: false,
-    });
+  const resendOtp = async () => {
+    if (cooldown > 0) return;
 
-    const { getByTestId } = renderScreen('9876543210');
-    typeOtp(getByTestId, '123456');
+    try {
+      await requestOtp({ phone });
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+      setError(null);
+    } catch (resendError) {
+      setError(getErrorMessage(resendError));
+    }
+  };
 
-    await waitFor(() => {
-      expect(authApi.verifyOtp).toHaveBeenCalledWith({ phone: '9876543210', otp: '123456' });
-    });
-  });
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Enter OTP</Text>
+      <Text style={styles.subtitle}>Sent to {formatPhone(phone)}</Text>
+      <OtpInput value={otp} onChangeText={setOtp} onComplete={submitOtp} disabled={isSubmitting} />
+      {error ? (
+        <Text testID="otp-submit-error" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+      <Pressable
+        testID="resend-otp-button"
+        style={[styles.linkButton, cooldown > 0 && styles.linkButtonDisabled]}
+        onPress={resendOtp}
+        disabled={cooldown > 0}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: cooldown > 0 }}
+      >
+        <Text style={styles.linkText}>{cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend OTP'}</Text>
+      </Pressable>
+    </View>
+  );
+}
 
-  it('commits the session into authStore on successful verify', async () => {
-    (authApi.verifyOtp as jest.Mock).mockResolvedValueOnce({
-      token: 'access-token',
-      refresh_token: 'refresh-token',
-      user: { id: 'u1', role: 'shipper', phone: '9876543210', name: 'Test User' },
-      is_new_user: false,
-    });
-
-    const { getByTestId } = renderScreen('9876543210');
-    typeOtp(getByTestId, '123456');
-
-    await waitFor(() => {
-      expect(useAuthStore.getState().isAuthenticated).toBe(true);
-    });
-    expect(useAuthStore.getState().role).toBe('shipper');
-    expect(useAuthStore.getState().token).toBe('access-token');
-    // Refresh token lives only in-memory in this store, never persisted.
-    expect(useAuthStore.getState().refreshToken).toBe('refresh-token');
-  });
-
-  it('sets isNewUser on the store when verify reports a first-time user', async () => {
-    (authApi.verifyOtp as jest.Mock).mockResolvedValueOnce({
-      token: 'access-token',
-      refresh_token: 'refresh-token',
-      user: { id: 'u2', role: 'shipper', phone: '9000000001', name: null },
-      is_new_user: true,
-    });
-
-    const { getByTestId } = renderScreen('9000000001');
-    typeOtp(getByTestId, '123456');
-
-    await waitFor(() => {
-      expect(useAuthStore.getState().isNewUser).toBe(true);
-    });
-  });
-
-  it('shows a friendly error and clears the input when the OTP is invalid', async () => {
-    (authApi.verifyOtp as jest.Mock).mockRejectedValueOnce({ code: 'OTP_INVALID' });
-
-    const { getByTestId, findByTestId } = renderScreen('9876543210');
-    typeOtp(getByTestId, '000000');
-
-    const error = await findByTestId('otp-submit-error');
-    expect(error.props.children).toMatch(/doesn't look right/i);
-    expect(useAuthStore.getState().isAuthenticated).toBe(false);
-  });
-
-  it('shows a friendly error when the OTP has expired', async () => {
-    (authApi.verifyOtp as jest.Mock).mockRejectedValueOnce({ code: 'OTP_EXPIRED' });
-
-    const { getByTestId, findByTestId } = renderScreen('9876543210');
-    typeOtp(getByTestId, '111111');
-
-    const error = await findByTestId('otp-submit-error');
-    expect(error.props.children).toMatch(/expired/i);
-  });
-
-  it('disables the resend button during the initial cooldown', () => {
-    const { getByTestId } = renderScreen('9876543210');
-    expect(getByTestId('resend-otp-button').props.accessibilityState?.disabled).toBe(true);
-  });
-
-  it('allows resending once the cooldown elapses, and calls requestOtp', async () => {
-    jest.useFakeTimers();
-    (authApi.requestOtp as jest.Mock).mockResolvedValueOnce({ otp_sent: true });
-
-    const { getByTestId } = renderScreen('9876543210');
-
-    act(() => {
-      jest.advanceTimersByTime(30000);
-    });
-
-    await waitFor(() => {
-      expect(getByTestId('resend-otp-button').props.accessibilityState?.disabled).toBe(false);
-    });
-
-    await act(async () => {
-      fireEvent.press(getByTestId('resend-otp-button'));
-    });
-
-    expect(authApi.requestOtp).toHaveBeenCalledWith({ phone: '9876543210' });
-    jest.useRealTimers();
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  title: {
+    color: '#111827',
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  subtitle: {
+    marginTop: 8,
+    marginBottom: 24,
+    color: '#64748B',
+    fontSize: 14,
+  },
+  error: {
+    marginTop: 12,
+    color: '#B91C1C',
+    fontSize: 13,
+  },
+  linkButton: {
+    alignSelf: 'flex-start',
+    marginTop: 20,
+    paddingVertical: 8,
+  },
+  linkButtonDisabled: {
+    opacity: 0.6,
+  },
+  linkText: {
+    color: '#2563EB',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });

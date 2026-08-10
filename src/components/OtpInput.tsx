@@ -1,50 +1,89 @@
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
-import OtpInput from '../../src/components/OtpInput';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, TextInput, View } from 'react-native';
 
-function Harness({ onComplete }: { onComplete?: (v: string) => void }) {
-  const [value, setValue] = React.useState('');
-  return <OtpInput value={value} onChangeText={setValue} onComplete={onComplete} />;
+interface OtpInputProps {
+  value: string;
+  onChangeText: (value: string) => void;
+  onComplete?: (value: string) => void;
+  length?: number;
+  disabled?: boolean;
 }
 
-describe('OtpInput', () => {
-  it('renders 6 digit boxes by default', () => {
-    const { getByTestId } = render(<Harness />);
-    for (let i = 0; i < 6; i++) {
-      expect(getByTestId(`otp-digit-${i}`)).toBeTruthy();
+export default function OtpInput({
+  value,
+  onChangeText,
+  onComplete,
+  length = 6,
+  disabled = false,
+}: OtpInputProps) {
+  const refs = useRef<Array<TextInput | null>>([]);
+
+  useEffect(() => {
+    if (value.length === length) {
+      onComplete?.(value);
     }
-  });
+  }, [length, onComplete, value]);
 
-  it('calls onComplete with the full value once all 6 digits are entered', () => {
-    const onComplete = jest.fn();
-    const { getByTestId } = render(<Harness onComplete={onComplete} />);
-    '123456'.split('').forEach((digit, i) => {
-      fireEvent.changeText(getByTestId(`otp-digit-${i}`), digit);
-    });
-    expect(onComplete).toHaveBeenCalledWith('123456');
-  });
+  const setDigit = (index: number, text: string) => {
+    const digit = text.replace(/\D/g, '').slice(-1);
+    const chars = value.padEnd(length, '').split('').slice(0, length);
+    chars[index] = digit;
+    const next = chars.join('').slice(0, length);
 
-  it('does not call onComplete when fewer than 6 digits are entered', () => {
-    const onComplete = jest.fn();
-    const { getByTestId } = render(<Harness onComplete={onComplete} />);
-    '123'.split('').forEach((digit, i) => {
-      fireEvent.changeText(getByTestId(`otp-digit-${i}`), digit);
-    });
-    expect(onComplete).not.toHaveBeenCalled();
-  });
+    onChangeText(next);
 
-  it('strips non-numeric characters from input', () => {
-    const onComplete = jest.fn();
-    const { getByTestId } = render(<Harness onComplete={onComplete} />);
-    fireEvent.changeText(getByTestId('otp-digit-0'), 'a');
-    expect(getByTestId('otp-digit-0').props.value).toBe('');
-  });
+    if (digit && index < length - 1) {
+      refs.current[index + 1]?.focus();
+    }
+  };
 
-  it('supports backspace navigating focus back to the previous box', () => {
-    const { getByTestId } = render(<Harness />);
-    const box1 = getByTestId('otp-digit-1');
-    const focusSpy = jest.spyOn(getByTestId('otp-digit-0'), 'focus' as any);
-    fireEvent(box1, 'keyPress', { nativeEvent: { key: 'Backspace' } });
-    expect(focusSpy).toHaveBeenCalled();
-  });
+  const handleBackspace = (index: number) => {
+    if (!value[index] && index > 0) {
+      refs.current[index - 1]?.focus();
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {Array.from({ length }).map((_, index) => (
+        <TextInput
+          key={index}
+          ref={(input) => {
+            refs.current[index] = input;
+          }}
+          testID={`otp-digit-${index}`}
+          style={styles.input}
+          value={value[index] ?? ''}
+          onChangeText={(text) => setDigit(index, text)}
+          onKeyPress={({ nativeEvent }) => {
+            if (nativeEvent.key === 'Backspace') {
+              handleBackspace(index);
+            }
+          }}
+          keyboardType="number-pad"
+          maxLength={1}
+          editable={!disabled}
+          accessibilityLabel={`OTP digit ${index + 1}`}
+        />
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  input: {
+    width: 44,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    color: '#111827',
+    fontSize: 20,
+    textAlign: 'center',
+    backgroundColor: '#FFFFFF',
+  },
 });

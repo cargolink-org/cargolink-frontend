@@ -1,22 +1,5 @@
-/**
- * Shared TypeScript types for CargoLink frontend state layer.
- *
- * NOTE: This file mirrors the shared `types.ts` established in Task A.2
- * (Zustand state management layer). Only the auth-relevant slice is
- * reproduced/extended here for Task B.1; the full type surface (Load,
- * Vehicle, Match, Notification, etc.) lives alongside these in the real
- * repo and is intentionally not duplicated in this delivery.
- */
-
-/** Roles recognized by the platform. Mirrors `users.role` in the DB schema. */
 export type UserRole = 'shipper' | 'transporter' | 'admin';
 
-/**
- * Minimal authenticated-user shape returned by `POST /auth/otp/verify`.
- * Field names are a best-guess against the draft OpenAPI shape and are
- * intentionally kept minimal — expand only once the contract freezes
- * (Week 2) to avoid inventing fields the backend doesn't actually return.
- */
 export interface AuthUser {
   id: string;
   role: UserRole;
@@ -24,8 +7,66 @@ export interface AuthUser {
   name?: string | null;
 }
 
-/** Access/refresh token pair, held in-memory only (see authStore). */
 export interface SessionTokens {
   token: string;
   refreshToken: string;
+}
+
+export type UserProfile = AuthUser | null;
+
+export interface LoadDraft {
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  cargoType?: string;
+  weightKg?: number;
+  notes?: string;
+}
+
+export interface MatchResult {
+  vehicleId: string;
+  transporterId: string;
+  estimatedFare?: number;
+}
+
+export interface FareQuote {
+  amount: number;
+  currency: string;
+}
+
+export interface AcceptedMatch {
+  id: string;
+  vehicleId: string;
+  transporterId: string;
+}
+
+export interface ShipmentDocumentsState {
+  invoiceUrl?: string;
+  ewayBillUrl?: string;
+  podUrl?: string;
+}
+
+export interface CheckpointsState {
+  pickupReached?: boolean;
+  loaded?: boolean;
+  delivered?: boolean;
+}
+
+export interface ContainerState {
+  containerNumber?: string;
+  sealNumber?: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  body?: string;
+  read: boolean;
+  createdAt?: string;
+}
+
+export type ConnectionState = 'connecting' | 'live' | 'offline' | 'error';
+
+export interface LatLng {
+  latitude: number;
+  longitude: number;
 }

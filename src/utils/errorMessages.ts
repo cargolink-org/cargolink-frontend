@@ -1,32 +1,26 @@
-import { getErrorMessage, toApiError } from '../../src/utils/errorMessages';
+export interface ApiError {
+  code?: string;
+  status?: number;
+}
 
-describe('getErrorMessage', () => {
-  it('maps known error codes to friendly copy', () => {
-    expect(getErrorMessage({ code: 'OTP_EXPIRED' })).toMatch(/expired/i);
-    expect(getErrorMessage({ code: 'OTP_INVALID' })).toMatch(/doesn't look right/i);
-    expect(getErrorMessage({ code: 'OTP_MAX_ATTEMPTS' })).toMatch(/too many/i);
-    expect(getErrorMessage({ code: 'RATE_LIMITED' })).toMatch(/too often/i);
-  });
+const DEFAULT_ERROR = 'Something went wrong. Please try again.';
 
-  it('falls back to a generic message for unknown codes', () => {
-    expect(getErrorMessage({ code: 'SOMETHING_NEW_FROM_BACKEND' })).toBe(
-      'Something went wrong. Please try again.',
-    );
-  });
+const ERROR_MESSAGES: Record<string, string> = {
+  OTP_EXPIRED: 'That OTP has expired. Please request a new one.',
+  OTP_INVALID: "That OTP doesn't look right. Please try again.",
+  OTP_MAX_ATTEMPTS: 'Too many attempts. Please request a new OTP.',
+  RATE_LIMITED: 'You are requesting OTPs too often. Please wait a moment.',
+};
 
-  it('falls back to a generic message for a null/undefined error', () => {
-    expect(getErrorMessage(null)).toBe('Something went wrong. Please try again.');
-    expect(getErrorMessage(undefined)).toBe('Something went wrong. Please try again.');
-  });
+export function getErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return DEFAULT_ERROR;
+  }
 
-  it('never echoes a raw backend message string, even if present', () => {
-    const message = getErrorMessage({ code: 'UNMAPPED', message: 'raw internal stack trace' });
-    expect(message).not.toMatch(/stack trace/i);
-  });
-});
+  const code = 'code' in error ? String((error as ApiError).code) : '';
+  return ERROR_MESSAGES[code] ?? DEFAULT_ERROR;
+}
 
-describe('toApiError', () => {
-  it('builds a well-formed ApiError', () => {
-    expect(toApiError('OTP_INVALID', 400)).toEqual({ code: 'OTP_INVALID', status: 400 });
-  });
-});
+export function toApiError(code: string, status?: number): ApiError {
+  return { code, status };
+}

@@ -26,3 +26,43 @@ export type RootStackParamList = {
   Transporter: undefined;
   Admin: undefined;
 };
+
+/**
+ * Shared by both role stacks' `ProfileScreen` route (task C.1, documented in
+ * MIGRATION_NOTES.md). `mode` is optional by design — screens fall back to
+ * `authStore.isNewUser` when it's omitted (e.g. when B.1 navigates in
+ * without explicit params).
+ */
+export type ProfileScreenParams = { mode?: 'create' | 'edit' } | undefined;
+
+/**
+ * ShipperStackParamList — was missing entirely even though
+ * `screens/shipper/ProfileScreen.tsx` (C.1) already imported it; added here
+ * as part of task D.1 alongside `LoadPosting`/`MatchResults`, since both
+ * gaps block the same file from compiling.
+ */
+export type ShipperStackParamList = {
+  Home: undefined;
+  ProfileScreen: ProfileScreenParams;
+  /** Task D.1 — no params; reads the shipper's existing profile from profileStore. */
+  LoadPosting: undefined;
+  /** Task D.2 (stubbed here per D.1's navigation dependency note) — needs
+   * the load_id returned by `POST /loads` to know which load's matches to
+   * fetch. */
+  MatchResults: { loadId: string };
+};
+
+/**
+ * TransporterStackParamList — likewise referenced (task C.2) but never
+ * defined. Added here purely as a type declaration so the existing
+ * `VehicleRegistrationScreen.tsx` / `DocumentUploadScreen.tsx` /
+ * `screens/transporter/ProfileScreen.tsx` compile; wiring `TransporterStack.tsx`
+ * itself to a real navigator is outside D.1's scope (Cluster C's task, not
+ * touched here).
+ */
+export type TransporterStackParamList = {
+  Home: undefined;
+  ProfileScreen: ProfileScreenParams;
+  VehicleRegistration: undefined;
+  DocumentUpload: undefined;
+};

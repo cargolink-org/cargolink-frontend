@@ -31,6 +31,11 @@ interface LoadState {
   draft: LoadDraft;
 
   // --- Server-derived state ---
+  // Set only after a confirmed successful POST /loads (task D.1) — read by
+  // MatchResultsScreen (D.2) to know which load's matches to fetch. Never
+  // set optimistically/pre-confirmation, since downstream matching depends
+  // on a real load_id existing.
+  activeLoadId: string | null;
   matches: MatchResult[];
   selectedVehicleId: string | null;
   quote: FareQuote | null;
@@ -48,6 +53,7 @@ interface LoadState {
   // --- Actions ---
   setDraft: (draft: Partial<LoadDraft>) => void;
   clearDraft: () => void;
+  setActiveLoadId: (loadId: string | null) => void;
   setMatches: (matches: MatchResult[]) => void;
   selectVehicle: (vehicleId: string | null) => void;
   setQuote: (quote: FareQuote | null) => void;
@@ -61,6 +67,7 @@ const initialDraft: LoadDraft = {};
 
 export const useLoadStore = create<LoadState>()((set) => ({
   draft: initialDraft,
+  activeLoadId: null,
   matches: [],
   selectedVehicleId: null,
   quote: null,
@@ -76,6 +83,8 @@ export const useLoadStore = create<LoadState>()((set) => ({
   setDraft: (partial) => set((s) => ({ draft: { ...s.draft, ...partial } })),
 
   clearDraft: () => set({ draft: initialDraft }),
+
+  setActiveLoadId: (activeLoadId) => set({ activeLoadId }),
 
   setMatches: (matches) => set({ matches, isLoadingMatches: false }),
 
@@ -102,6 +111,7 @@ export const useLoadStore = create<LoadState>()((set) => ({
 
 // Fine-grained selector hooks.
 export const useLoadDraft = () => useLoadStore((s) => s.draft);
+export const useActiveLoadId = () => useLoadStore((s) => s.activeLoadId);
 export const useMatches = () => useLoadStore((s) => s.matches);
 export const useSelectedVehicleId = () => useLoadStore((s) => s.selectedVehicleId);
 export const useQuote = () => useLoadStore((s) => s.quote);

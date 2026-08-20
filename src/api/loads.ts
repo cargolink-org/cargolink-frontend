@@ -2,6 +2,7 @@ import type { AxiosError } from 'axios';
 
 import { apiClient } from './client';
 import type { LoadFormValues } from '../validation/loadSchema';
+import type { MatchResult, AcceptedMatch } from '../state/types';
 
 /**
  * ASSUMPTION (flag for review before merging, same as `api/vehicles.ts` and
@@ -147,4 +148,185 @@ export async function postLoadMock(values: LoadFormValues): Promise<PostLoadResp
  */
 export async function postLoad(values: LoadFormValues): Promise<PostLoadResponse> {
   return MOCK_MODE ? postLoadMock(values) : postLoadViaApi(values);
+}
+
+/* ---------------------------------------------------------------------- *
+ * GET /loads/{id}/matches — Task D.2
+ * ---------------------------------------------------------------------- */
+
+export interface GetMatchesParams {
+  radiusKm?: number;
+  limit?: number;
+}
+
+export interface GetMatchesError {
+  kind: 'network' | 'unknown';
+  message: string;
+}
+
+export function isGetMatchesError(err: unknown): err is GetMatchesError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'kind' in err &&
+    'message' in err &&
+    typeof (err as GetMatchesError).message === 'string'
+  );
+}
+
+/** Sentinel `loadId` used by mock mode / tests to exercise the zero-matches
+ * empty state without a real backend — per the task's explicit "a special
+ * loadId value returns an empty array" requirement. */
+export const MOCK_EMPTY_MATCHES_LOAD_ID = 'mock-load-empty-matches';
+
+/** Sentinel `vehicle_id`, shared with the mock accept-match handler below,
+ * so selecting this match from the mock list deterministically exercises
+ * the accept-conflict (409-style) recovery path in tests/demos. */
+export const MOCK_CONFLICT_VEHICLE_ID = 'mock-vehicle-conflict';
+
+const MOCK_MATCHES: MatchResult[] = [
+  { vehicle_id: 'mock-vehicle-1', distance_km: 4.2, capacity_fit: true, eta: '12 min', score: 0.94 },
+  { vehicle_id: 'mock-vehicle-2', distance_km: 9.8, capacity_fit: true, eta: '24 min', score: 0.81 },
+  { vehicle_id: MOCK_CONFLICT_VEHICLE_ID, distance_km: 6.5, capacity_fit: true, eta: '17 min', score: 0.88 },
+  { vehicle_id: 'mock-vehicle-3', distance_km: 15.1, capacity_fit: true, eta: '38 min', score: 0.67 },
+];
+
+function mockGetMatches(loadId: string): Promise<MatchResult[]> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(loadId === MOCK_EMPTY_MATCHES_LOAD_ID ? [] : MOCK_MATCHES);
+    }, 500);
+  });
+}
+
+function toGetMatchesError(err: unknown): GetMatchesError {
+  const axiosErr = err as AxiosError | undefined;
+  if (axiosErr?.isAxiosError && !axiosErr.response) {
+    return {
+      kind: 'network',
+      message: 'No network connection. Check your connection and try again.',
+    };
+  }
+  return { kind: 'unknown', message: 'Could not load matches. Please try again.' };
+}
+
+/** Exported for direct testing, same reasoning as `postLoadViaApi`/`postLoadMock` above. */
+export async function getMatchesViaApi(
+  loadId: string,
+  params?: GetMatchesParams
+): Promise<MatchResult[]> {
+  try {
+    const { data } = await apiClient.get<MatchResult[]>(`/loads/${loadId}/matches`, {
+      params: { radius_km: params?.radiusKm, limit: params?.limit },
+    });
+    return data;
+  } catch (err) {
+    throw toGetMatchesError(err);
+  }
+}
+
+export async function getMatchesMock(loadId: string): Promise<MatchResult[]> {
+  return mockGetMatches(loadId);
+}
+
+/**
+ * Fetches ranked matches for a posted load, sorted by `score` descending as
+ * returned by the backend/mock — no client-side re-sort. Resolves with `[]`
+ * for a load with no matches (a normal, non-error outcome the screen must
+ * render as an empty state, not a failure).
+ */
+export async function getMatches(
+  loadId: string,
+  params?: GetMatchesParams
+): Promise<MatchResult[]> {
+  return MOCK_MODE ? getMatchesMock(loadId) : getMatchesViaApi(loadId, params);
+}
+
+/* ---------------------------------------------------------------------- *
+ * POST /loads/{id}/accept — Task D.2
+ * ---------------------------------------------------------------------- */
+
+export interface AcceptMatchError {
+  kind: 'conflict' | 'network' | 'unknown';
+  message: string;
+}
+
+export function isAcceptMatchError(err: unknown): err is AcceptMatchError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'kind' in err &&
+    'message' in err &&
+    typeof (err as AcceptMatchError).message === 'string'
+  );
+}
+
+function mockAcceptMatch(loadId: string, vehicleId: string): Promise<AcceptedMatch> {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (vehicleId === MOCK_CONFLICT_VEHICLE_ID) {
+        const error: AcceptMatchError = {
+          kind: 'conflict',
+          message: 'This transporter is no longer available — please refresh and choose another.',
+        };
+        reject(error);
+        return;
+      }
+      resolve({ match_id: `mock-match-${loadId}-${Date.now()}`, status: 'accepted' });
+    }, 500);
+  });
+}
+
+function toAcceptMatchError(err: unknown): AcceptMatchError {
+  const axiosErr = err as AxiosError<{ message?: string }> | undefined;
+
+  if (axiosErr?.isAxiosError) {
+    if (!axiosErr.response) {
+      return {
+        kind: 'network',
+        message: 'No network connection. Check your connection and try again.',
+      };
+    }
+    if (axiosErr.response.status === 409) {
+      return {
+        kind: 'conflict',
+        message:
+          axiosErr.response.data?.message ??
+          'This transporter is no longer available — please refresh and choose another.',
+      };
+    }
+    return {
+      kind: 'unknown',
+      message: axiosErr.response.data?.message ?? 'Could not accept this match. Please try again.',
+    };
+  }
+
+  return { kind: 'unknown', message: 'Something went wrong. Please try again.' };
+}
+
+/** Exported for direct testing, same reasoning as `postLoadViaApi`/`postLoadMock` above. */
+export async function acceptMatchViaApi(loadId: string, vehicleId: string): Promise<AcceptedMatch> {
+  try {
+    const { data } = await apiClient.post<AcceptedMatch>(`/loads/${loadId}/accept`, {
+      vehicle_id: vehicleId,
+    });
+    return data;
+  } catch (err) {
+    throw toAcceptMatchError(err);
+  }
+}
+
+export async function acceptMatchMock(loadId: string, vehicleId: string): Promise<AcceptedMatch> {
+  return mockAcceptMatch(loadId, vehicleId);
+}
+
+/**
+ * Accepts a matched transporter for a load. Resolves with `{ match_id,
+ * status }`; rejects with an `AcceptMatchError` — `kind: 'conflict'` means
+ * this specific match became unavailable (a realistic marketplace race
+ * condition) and must route to the refresh-matches recovery path rather
+ * than a plain retry, since retrying the same call would fail again.
+ */
+export async function acceptMatch(loadId: string, vehicleId: string): Promise<AcceptedMatch> {
+  return MOCK_MODE ? acceptMatchMock(loadId, vehicleId) : acceptMatchViaApi(loadId, vehicleId);
 }

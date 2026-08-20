@@ -46,10 +46,15 @@ export type ShipperStackParamList = {
   ProfileScreen: ProfileScreenParams;
   /** Task D.1 — no params; reads the shipper's existing profile from profileStore. */
   LoadPosting: undefined;
-  /** Task D.2 (stubbed here per D.1's navigation dependency note) — needs
-   * the load_id returned by `POST /loads` to know which load's matches to
-   * fetch. */
+  /** Task D.2 — needs the load_id returned by `POST /loads` to know which
+   * load's matches to fetch. */
   MatchResults: { loadId: string };
+  /** Task D.2 — needs both the load and the specific vehicle selected from
+   * MatchResultsScreen to fetch the right fare quote. */
+  FareQuoteScreen: { loadId: string; vehicleId: string };
+  /** Stub target for Cluster E (live tracking), registered now per D.2's
+   * navigation dependency note — same pattern D.1 used for MatchResults. */
+  Tracking: { loadId: string };
 };
 
 /**

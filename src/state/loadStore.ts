@@ -37,6 +37,13 @@ interface LoadState {
   // on a real load_id existing.
   activeLoadId: string | null;
   matches: MatchResult[];
+  /**
+   * Which `loadId` `matches` was fetched for (task D.2's brief-cache
+   * requirement). `MatchResultsScreen` skips re-fetching on mount when
+   * this already equals the current route's `loadId`; pull-to-refresh and
+   * `invalidateMatches()` both force a fresh fetch regardless.
+   */
+  matchesLoadId: string | null;
   selectedVehicleId: string | null;
   quote: FareQuote | null;
   acceptedMatch: AcceptedMatch | null;
@@ -47,6 +54,11 @@ interface LoadState {
   // --- Async status (scaffolded now to avoid a breaking shape change
   //     when Cluster B/D wire in real API calls) ---
   isLoadingMatches: boolean;
+  matchesError: string | null;
+  isLoadingQuote: boolean;
+  quoteError: string | null;
+  isAccepting: boolean;
+  acceptError: string | null;
   isPosting: boolean;
   postError: string | null;
 
@@ -54,13 +66,23 @@ interface LoadState {
   setDraft: (draft: Partial<LoadDraft>) => void;
   clearDraft: () => void;
   setActiveLoadId: (loadId: string | null) => void;
-  setMatches: (matches: MatchResult[]) => void;
+  setMatches: (loadId: string, matches: MatchResult[]) => void;
+  /** Forces the next `MatchResultsScreen` mount to re-fetch even though
+   * `matchesLoadId` still points at the current load — used by the
+   * accept-conflict recovery path, since the cached list is known-stale
+   * (a match in it just came back unavailable). */
+  invalidateMatches: () => void;
+  setMatchesError: (error: string | null) => void;
+  setIsLoadingMatches: (loading: boolean) => void;
   selectVehicle: (vehicleId: string | null) => void;
   setQuote: (quote: FareQuote | null) => void;
+  setQuoteError: (error: string | null) => void;
+  setIsLoadingQuote: (loading: boolean) => void;
   setAcceptedMatch: (match: AcceptedMatch | null) => void;
+  setAcceptError: (error: string | null) => void;
+  setIsAccepting: (accepting: boolean) => void;
   setPostError: (error: string | null) => void;
   setIsPosting: (posting: boolean) => void;
-  setIsLoadingMatches: (loading: boolean) => void;
 }
 
 const initialDraft: LoadDraft = {};
@@ -69,6 +91,7 @@ export const useLoadStore = create<LoadState>()((set) => ({
   draft: initialDraft,
   activeLoadId: null,
   matches: [],
+  matchesLoadId: null,
   selectedVehicleId: null,
   quote: null,
   acceptedMatch: null,
@@ -77,6 +100,11 @@ export const useLoadStore = create<LoadState>()((set) => ({
   container: {},
 
   isLoadingMatches: false,
+  matchesError: null,
+  isLoadingQuote: false,
+  quoteError: null,
+  isAccepting: false,
+  acceptError: null,
   isPosting: false,
   postError: null,
 
@@ -86,11 +114,22 @@ export const useLoadStore = create<LoadState>()((set) => ({
 
   setActiveLoadId: (activeLoadId) => set({ activeLoadId }),
 
-  setMatches: (matches) => set({ matches, isLoadingMatches: false }),
+  setMatches: (loadId, matches) =>
+    set({ matches, matchesLoadId: loadId, isLoadingMatches: false, matchesError: null }),
+
+  invalidateMatches: () => set({ matchesLoadId: null }),
+
+  setMatchesError: (matchesError) => set({ matchesError, isLoadingMatches: false }),
+
+  setIsLoadingMatches: (isLoadingMatches) => set({ isLoadingMatches }),
 
   selectVehicle: (selectedVehicleId) => set({ selectedVehicleId }),
 
-  setQuote: (quote) => set({ quote }),
+  setQuote: (quote) => set({ quote, isLoadingQuote: false, quoteError: null }),
+
+  setQuoteError: (quoteError) => set({ quoteError, isLoadingQuote: false }),
+
+  setIsLoadingQuote: (isLoadingQuote) => set({ isLoadingQuote }),
 
   // Accepting a match is the draft->accepted transition: the load has
   // moved from "being composed/matched" to "in flight", so the working
@@ -100,13 +139,19 @@ export const useLoadStore = create<LoadState>()((set) => ({
       acceptedMatch,
       draft: initialDraft,
       matches: [],
+      matchesLoadId: null,
       selectedVehicleId: null,
       quote: null,
+      isAccepting: false,
+      acceptError: null,
     }),
+
+  setAcceptError: (acceptError) => set({ acceptError, isAccepting: false }),
+
+  setIsAccepting: (isAccepting) => set({ isAccepting }),
 
   setPostError: (postError) => set({ postError }),
   setIsPosting: (isPosting) => set({ isPosting }),
-  setIsLoadingMatches: (isLoadingMatches) => set({ isLoadingMatches }),
 }));
 
 // Fine-grained selector hooks.

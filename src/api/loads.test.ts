@@ -7,6 +7,14 @@ import {
   buildPostLoadPayload,
   isLoadPostError,
   MOCK_REJECTION_WEIGHT_KG,
+  getMatchesMock,
+  getMatchesViaApi,
+  isGetMatchesError,
+  MOCK_EMPTY_MATCHES_LOAD_ID,
+  MOCK_CONFLICT_VEHICLE_ID,
+  acceptMatchMock,
+  acceptMatchViaApi,
+  isAcceptMatchError,
   type LoadPostError,
 } from './loads';
 import type { LoadFormValues } from '../validation/loadSchema';
@@ -129,5 +137,158 @@ describe('isLoadPostError', () => {
   it('rejects null/undefined', () => {
     expect(isLoadPostError(null)).toBe(false);
     expect(isLoadPostError(undefined)).toBe(false);
+  });
+});
+
+// --- Task D.2: GET /loads/{id}/matches -------------------------------
+
+describe('getMatchesMock', () => {
+  it('resolves with a non-empty, score-varied list for a normal loadId', async () => {
+    const results = await getMatchesMock('load-1');
+    expect(results.length).toBeGreaterThan(1);
+    expect(results.every((m) => typeof m.vehicle_id === 'string')).toBe(true);
+  });
+
+  it('resolves with an empty array for the sentinel empty-matches loadId', async () => {
+    const results = await getMatchesMock(MOCK_EMPTY_MATCHES_LOAD_ID);
+    expect(results).toEqual([]);
+  });
+});
+
+describe('getMatchesViaApi', () => {
+  let mock: MockAdapter;
+
+  beforeAll(() => {
+    mock = new MockAdapter(apiClient);
+  });
+
+  afterEach(() => {
+    mock.reset();
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  it('requests the matches endpoint with query params and resolves with the response body', async () => {
+    // Assertions must not live inside the .reply() callback — axios-mock-
+    // adapter treats a thrown assertion there as a request failure, not a
+    // propagated test failure, which would otherwise silently mask this
+    // check as an unrelated "could not load matches" error. Capture the
+    // config and assert on it afterward instead.
+    let seenParams: unknown;
+    mock.onGet('/loads/load-1/matches').reply((config) => {
+      seenParams = config.params;
+      return [200, [{ vehicle_id: 'v1', distance_km: 5, capacity_fit: true, eta: '10 min', score: 0.9 }]];
+    });
+
+    const results = await getMatchesViaApi('load-1', { radiusKm: 50, limit: 10 });
+
+    expect(seenParams).toEqual({ radius_km: 50, limit: 10 });
+    expect(results).toEqual([
+      { vehicle_id: 'v1', distance_km: 5, capacity_fit: true, eta: '10 min', score: 0.9 },
+    ]);
+  });
+
+  it('classifies a response-less failure as a network error', async () => {
+    mock.onGet('/loads/load-1/matches').networkError();
+
+    await expect(getMatchesViaApi('load-1')).rejects.toMatchObject({ kind: 'network' });
+  });
+
+  it('classifies any server-side failure as unknown (no partial-data guessing)', async () => {
+    mock.onGet('/loads/load-1/matches').reply(500);
+
+    await expect(getMatchesViaApi('load-1')).rejects.toMatchObject({ kind: 'unknown' });
+  });
+});
+
+describe('isGetMatchesError', () => {
+  it('recognizes a GetMatchesError shape and rejects non-matching values', () => {
+    expect(isGetMatchesError({ kind: 'network', message: 'x' })).toBe(true);
+    expect(isGetMatchesError(new Error('x'))).toBe(false);
+    expect(isGetMatchesError(null)).toBe(false);
+  });
+});
+
+// --- Task D.2: POST /loads/{id}/accept --------------------------------
+
+describe('acceptMatchMock', () => {
+  it('resolves with a match_id and accepted status for a normal vehicleId', async () => {
+    const response = await acceptMatchMock('load-1', 'vehicle-1');
+    expect(response.match_id).toMatch(/^mock-match-/);
+    expect(response.status).toBe('accepted');
+  });
+
+  it('rejects with a conflict error for the sentinel conflict vehicleId', async () => {
+    await expect(acceptMatchMock('load-1', MOCK_CONFLICT_VEHICLE_ID)).rejects.toMatchObject({
+      kind: 'conflict',
+      message: expect.stringMatching(/no longer available/i),
+    });
+  });
+});
+
+describe('acceptMatchViaApi', () => {
+  let mock: MockAdapter;
+
+  beforeAll(() => {
+    mock = new MockAdapter(apiClient);
+  });
+
+  afterEach(() => {
+    mock.reset();
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  it('posts vehicle_id and resolves with the response body', async () => {
+    // See the note on getMatchesViaApi's test above — assertions must not
+    // live inside .reply(), so the request body is captured and checked
+    // afterward instead.
+    let seenBody: unknown;
+    mock.onPost('/loads/load-1/accept').reply((config) => {
+      seenBody = JSON.parse(config.data);
+      return [200, { match_id: 'match-1', status: 'accepted' }];
+    });
+
+    const response = await acceptMatchViaApi('load-1', 'vehicle-1');
+
+    expect(seenBody).toEqual({ vehicle_id: 'vehicle-1' });
+    expect(response).toEqual({ match_id: 'match-1', status: 'accepted' });
+  });
+
+  it('classifies a 409 response as a conflict and surfaces the server message', async () => {
+    mock.onPost('/loads/load-1/accept').reply(409, { message: 'Already taken by another shipper.' });
+
+    await expect(acceptMatchViaApi('load-1', 'vehicle-1')).rejects.toMatchObject({
+      kind: 'conflict',
+      message: 'Already taken by another shipper.',
+    });
+  });
+
+  it('classifies a response-less failure as a network error', async () => {
+    mock.onPost('/loads/load-1/accept').networkError();
+
+    await expect(acceptMatchViaApi('load-1', 'vehicle-1')).rejects.toMatchObject({
+      kind: 'network',
+    });
+  });
+
+  it('classifies a non-409 server error as unknown', async () => {
+    mock.onPost('/loads/load-1/accept').reply(500, {});
+
+    await expect(acceptMatchViaApi('load-1', 'vehicle-1')).rejects.toMatchObject({
+      kind: 'unknown',
+    });
+  });
+});
+
+describe('isAcceptMatchError', () => {
+  it('recognizes an AcceptMatchError shape and rejects non-matching values', () => {
+    expect(isAcceptMatchError({ kind: 'conflict', message: 'x' })).toBe(true);
+    expect(isAcceptMatchError(new Error('x'))).toBe(false);
+    expect(isAcceptMatchError(undefined)).toBe(false);
   });
 });

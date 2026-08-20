@@ -57,21 +57,40 @@ export interface LoadDraft {
   preferredVehicleType?: VehicleType;
 }
 
+/**
+ * MatchResult — Task D.2 shape.
+ *
+ * PREVIOUSLY (A.2 scaffold): `{ vehicleId, transporterId, estimatedFare? }`.
+ * Replaced here with the actual `GET /loads/{id}/matches` response shape
+ * from the technical spec (draft, pending Week 2 freeze). Field names are
+ * kept snake_case, matching the wire contract exactly — same convention as
+ * `PostLoadPayload`/`PostLoadResponse` in `api/loads.ts` — since
+ * `MatchCard`/`FareBreakdown` render these fields directly and a 1:1 match
+ * to the contract minimizes mapping-bug risk. No other file in the repo
+ * referenced the old shape at the time of this change (verified).
+ */
 export interface MatchResult {
-  vehicleId: string;
-  transporterId: string;
-  estimatedFare?: number;
+  vehicle_id: string;
+  distance_km: number;
+  capacity_fit: boolean;
+  /** Human-readable ETA text as returned by the routing/matching engine
+   * (e.g. "24 min") — displayed as-is, no client-side date math. */
+  eta: string;
+  score: number;
 }
 
+/** `GET /pricing/quote` response shape (technical spec, draft). */
 export interface FareQuote {
-  amount: number;
-  currency: string;
+  base_fare: number;
+  distance_cost: number;
+  surcharge: number;
+  total: number;
 }
 
+/** `POST /loads/{id}/accept` response shape (technical spec, draft). */
 export interface AcceptedMatch {
-  id: string;
-  vehicleId: string;
-  transporterId: string;
+  match_id: string;
+  status: string;
 }
 
 export interface ShipmentDocumentsState {

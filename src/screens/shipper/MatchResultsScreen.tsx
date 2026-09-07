@@ -78,7 +78,12 @@ export default function MatchResultsScreen({ route, navigation }: Props) {
 
   const handleSelect = (vehicleId: string) => {
     selectVehicle(vehicleId);
-    navigation.navigate('FareQuoteScreen', { loadId, vehicleId });
+    // Threads the matching engine's `eta` text forward (task E.1) so the
+    // live-tracking screen's EtaBadge has real data to show later in this
+    // flow, instead of the value being dropped at this screen boundary —
+    // `GET /tracking/{vehicleId}` never returns an ETA of its own.
+    const selectedMatch = matches.find((m) => m.vehicle_id === vehicleId);
+    navigation.navigate('FareQuoteScreen', { loadId, vehicleId, eta: selectedMatch?.eta });
   };
 
   const renderItem = ({ item }: { item: MatchResult }) => (

@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Mapbox from '@rnmapbox/maps';
 
-import type { ShipperStackParamList } from '../../navigation/types';
+import type { TransporterStackParamList } from '../../navigation/types';
 import { getTrackingHistory, isGetTrackingHistoryError } from '../../api/tracking';
 import * as sockets from '../../services/sockets';
 import {
@@ -13,38 +13,39 @@ import {
   useTrackingLastUpdatedAt,
 } from '../../state/trackingStore';
 import { MapMarker } from '../../components/MapMarker';
-import { EtaBadge } from '../../components/EtaBadge';
 import { getLastSeenLabel } from '../../utils/formatters';
 import type { LatLng } from '../../state/types';
 
-type Props = NativeStackScreenProps<ShipperStackParamList, 'Tracking'>;
+type Props = NativeStackScreenProps<TransporterStackParamList, 'Tracking'>;
 
 function toLatLng(point: { lat: number; lng: number }): LatLng {
   return { latitude: point.lat, longitude: point.lng };
 }
 
 /**
- * TrackingScreen (shipper variant) — Task E.1.
+ * TrackingScreen (transporter variant) — Task E.1.
  *
- * Replaces the D.2 placeholder stub. Subscribes to the accepted load's
- * live position feed via `services/sockets.ts` and renders it on a native
- * Mapbox map, with an ETA badge and an explicit three(+)-state connection
- * indicator — see the Performance/UI sections of the task spec, which
- * name this the highest-risk screen in the frontend track.
+ * Shows the transporter's own live position. In production this is fed by
+ * Task E.2's background-location task (the transporter's device IS the
+ * source of the location, not a subscriber to someone else's); per the
+ * Sprint 4 sprint-plan scope and this task's own Dependencies section,
+ * both this screen and E.2 are built against the SAME simulated-route
+ * mechanism for now, so this screen subscribes to `sockets.ts` exactly
+ * like the shipper variant does. Swapping to a real device GPS feed as
+ * E.2 comes online is expected to happen inside `sockets.ts`/E.2, not
+ * here — this screen only cares about "what is my current position,"
+ * regardless of source.
  *
- * On backgrounding/foregrounding: this screen deliberately does NOT add a
- * separate `AppState`-driven resubscribe effect. `sockets.ts` is a
- * singleton that keeps running independent of this component's mount
- * state, and this component's own subscriptions are set up exactly once
- * per (loadId, vehicleId) pair and torn down exactly once on unmount —
- * there is no "resubscribe" path that could double-subscribe, because
- * backgrounding the app does not by itself unmount this screen. The named
- * failure mode (duplicate listeners across mount/unmount cycles) is
- * covered by the mount -> unmount -> remount test in
- * `TrackingScreen.test.tsx` instead.
+ * Route-line/pickup-destination context is intentionally NOT drawn here:
+ * no data source yet exists on the transporter's session for an accepted
+ * load's source/destination coordinates (loadStore, as it stands, is
+ * shipper-only state on the shipper's device — a real multi-account
+ * backend hasn't been wired up yet). Flagged as a forward-looking
+ * integration gap rather than guessed at, per the task's own allowance
+ * for TBD transporter-side data sourcing.
  */
 export default function TrackingScreen({ route }: Props) {
-  const { loadId, vehicleId, eta } = route.params;
+  const { loadId, vehicleId } = route.params;
 
   const currentPosition = useTrackingPosition();
   const connectionState = useTrackingConnectionState();
@@ -54,18 +55,11 @@ export default function TrackingScreen({ route }: Props) {
   const reset = useTrackingStore((s) => s.reset);
 
   const [historyError, setHistoryError] = React.useState<string | null>(null);
-  // Re-renders once a minute purely to keep the "Last seen X min ago"
-  // label current while no new pings are arriving — a stale timestamp
-  // doesn't otherwise trigger a re-render on its own.
   const [, forceTick] = React.useReducer((n: number) => n + 1, 0);
 
   React.useEffect(() => {
     let cancelled = false;
 
-    // Historical/initial load — non-blocking per the task's edge case: a
-    // failure here must not prevent the live socket stream from working,
-    // so the error is captured locally and the map still mounts once the
-    // first live update arrives.
     (async () => {
       try {
         const history = await getTrackingHistory(vehicleId);
@@ -96,8 +90,9 @@ export default function TrackingScreen({ route }: Props) {
       sockets.leaveRoom();
       reset();
     };
-    // Re-subscribes only when the load/vehicle pairing actually changes,
-    // matching the convention FareQuoteScreen's fetchQuote effect uses.
+    // See the shipper variant's identical comment: no AppState-driven
+    // resubscribe effect by design — this singleton subscription survives
+    // backgrounding without needing one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadId, vehicleId]);
 
@@ -120,8 +115,16 @@ export default function TrackingScreen({ route }: Props) {
     }
   }, [connectionState, lastUpdatedAt]);
 
+  const handleCheckpointQuickAccess = () => {
+    // Navigation entry point only, per the task's explicit scope — the
+    // real CheckpointTimelineScreen destination is Cluster F's build, not
+    // this task's. A placeholder confirms the affordance is reachable and
+    // wired without navigating to a route that doesn't exist yet.
+    Alert.alert('Checkpoint updates', 'Checkpoint status updates ship in Cluster F.');
+  };
+
   return (
-    <View style={styles.container} testID="shipper-tracking-screen">
+    <View style={styles.container} testID="transporter-tracking-screen">
       <View style={styles.mapContainer} testID="tracking-map-container">
         {!currentPosition ? (
           <View style={styles.mapSkeleton} testID="tracking-map-skeleton">
@@ -135,13 +138,9 @@ export default function TrackingScreen({ route }: Props) {
               animationMode="flyTo"
               animationDuration={800}
             />
-            <MapMarker position={currentPosition} accessibilityLabel="Transporter's current location" />
+            <MapMarker position={currentPosition} accessibilityLabel="Your current location" />
           </Mapbox.MapView>
         )}
-
-        <View style={styles.etaOverlay}>
-          <EtaBadge etaLabel={eta ?? null} />
-        </View>
       </View>
 
       <View style={styles.statusStrip} testID="tracking-status-strip">
@@ -171,6 +170,15 @@ export default function TrackingScreen({ route }: Props) {
         </Text>
       )}
 
+      <Pressable
+        style={styles.checkpointButton}
+        onPress={handleCheckpointQuickAccess}
+        accessibilityRole="button"
+        testID="tracking-checkpoint-quick-access"
+      >
+        <Text style={styles.checkpointButtonLabel}>Update checkpoint status</Text>
+      </Pressable>
+
       <Text style={styles.loadIdText} testID="tracking-load-id">
         Load ID: {loadId}
       </Text>
@@ -180,7 +188,7 @@ export default function TrackingScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  mapContainer: { flex: 1, position: 'relative' },
+  mapContainer: { flex: 1 },
   map: { flex: 1 },
   mapSkeleton: {
     flex: 1,
@@ -188,7 +196,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  etaOverlay: { position: 'absolute', top: 16, left: 16 },
   statusStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -215,6 +222,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
+  checkpointButton: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#0B5FCC',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  checkpointButtonLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   loadIdText: {
     fontSize: 11,
     color: '#9AA1AC',

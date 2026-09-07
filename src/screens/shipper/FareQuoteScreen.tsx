@@ -17,7 +17,7 @@ type Props = NativeStackScreenProps<ShipperStackParamList, 'FareQuoteScreen'>;
 type AcceptFailureKind = 'conflict' | 'retryable' | null;
 
 export default function FareQuoteScreen({ route, navigation }: Props) {
-  const { loadId, vehicleId } = route.params;
+  const { loadId, vehicleId, eta } = route.params;
 
   const quote = useLoadStore((s) => s.quote);
   const isLoadingQuote = useLoadStore((s) => s.isLoadingQuote);
@@ -95,7 +95,11 @@ export default function FareQuoteScreen({ route, navigation }: Props) {
     try {
       const response = await acceptMatch(loadId, vehicleId);
       setAcceptedMatch(response);
-      navigation.navigate('Tracking', { loadId });
+      // vehicleId/eta (task E.1) — Tracking needs vehicleId to call
+      // GET /tracking/{vehicleId} and join the right room; eta is
+      // forwarded so EtaBadge shows real matching-engine data instead of
+      // a client-synthesized estimate.
+      navigation.navigate('Tracking', { loadId, vehicleId, eta });
     } catch (err) {
       if (isAcceptMatchError(err)) {
         setAcceptError(err.message);

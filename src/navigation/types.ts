@@ -50,11 +50,20 @@ export type ShipperStackParamList = {
    * load's matches to fetch. */
   MatchResults: { loadId: string };
   /** Task D.2 — needs both the load and the specific vehicle selected from
-   * MatchResultsScreen to fetch the right fare quote. */
-  FareQuoteScreen: { loadId: string; vehicleId: string };
-  /** Stub target for Cluster E (live tracking), registered now per D.2's
-   * navigation dependency note — same pattern D.1 used for MatchResults. */
-  Tracking: { loadId: string };
+   * MatchResultsScreen to fetch the right fare quote. `eta` (task E.1)
+   * carries the matching engine's ETA text forward from MatchResultsScreen
+   * — optional since it's a display nicety, not required for the quote
+   * itself, and defensively absent if a screen ever navigates here without
+   * it. */
+  FareQuoteScreen: { loadId: string; vehicleId: string; eta?: string };
+  /**
+   * Live tracking screen (task E.1 — replaces the D.2 stub). Needs
+   * `vehicleId` (not just `loadId`) to call `GET /tracking/{vehicleId}`
+   * and to know which room to join; `eta` is threaded through from
+   * FareQuoteScreen so EtaBadge has real matching-engine data to show
+   * rather than a synthesized client-side estimate (see EtaBadge.tsx).
+   */
+  Tracking: { loadId: string; vehicleId: string; eta?: string };
 };
 
 /**
@@ -70,4 +79,14 @@ export type TransporterStackParamList = {
   ProfileScreen: ProfileScreenParams;
   VehicleRegistration: undefined;
   DocumentUpload: undefined;
+  /**
+   * Live tracking screen, transporter variant (task E.1). No dedicated
+   * "active trip" / "Incoming Loads" screen exists yet to derive these
+   * from, so — per the task's explicit guidance for this situation — the
+   * screen is registered as directly reachable now, with the params it
+   * will genuinely need once a real active-trip source exists, rather
+   * than deferred. See `TransporterHomeScreen`'s "Start trip" affordance
+   * for the current (dev/demo) entry point.
+   */
+  Tracking: { loadId: string; vehicleId: string };
 };

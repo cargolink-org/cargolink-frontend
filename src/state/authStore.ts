@@ -22,6 +22,18 @@ interface AuthState {
   hydrate: () => Promise<void>;
   setSession: (token: string, refreshToken: string, user: AuthUser, isNewUser?: boolean) => void;
   setAccessToken: (token: string) => void;
+  /**
+   * Added as part of Task E.1's `tsc --noEmit` verification pass.
+   * PREVIOUSLY: `ShipperProfileScreen`/`TransporterProfileScreen` (Cluster
+   * C) already called `useAuthStore((state) => state.setIsNewUser)` and
+   * invoked `setIsNewUser(false)` after a first-time profile is created —
+   * the action just didn't exist on this store, which `tsc --noEmit`
+   * silently never caught until now (no typecheck step exists yet in
+   * `package.json`'s scripts/CI). Purely additive: flips the one flag
+   * those two call sites already expected to be able to flip; no existing
+   * behavior changes.
+   */
+  setIsNewUser: (isNewUser: boolean) => void;
   logout: (reason?: 'expired' | null) => Promise<void>;
   clearSession: () => void;
   clearLogoutReason: () => void;
@@ -60,6 +72,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setAccessToken: (token) => set({ token }),
+
+  setIsNewUser: (isNewUser) => set({ isNewUser }),
 
   logout: async (reason = null) => {
     await secureStorage.clearTokens();

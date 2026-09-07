@@ -1,36 +1,53 @@
 import React from 'react';
 import { useAuthStore } from '../state/authStore';
-// import AppStack from './AppStack';
-// import AuthStack from './AuthStack';
+import AuthStack from './AuthStack';
+import ShipperStack from './ShipperStack';
+import TransporterStack from './TransporterStack';
+import AdminStack from './AdminStack';
 
 /**
- * ASSUMPTION FLAG: illustrative — I don't have A.1's actual RootSwitch.tsx
- * or your AppStack/AuthStack/PhoneEntryScreen components, so the shape
- * here (a component reading two store fields and branching) is a stand-in
- * for the real navigator wiring. Port the logic, not the JSX literally.
+ * RootSwitch — fixed as part of Task E.1.
+ *
+ * PREVIOUSLY: this component returned `null` in every branch (a leftover
+ * from an earlier session that lacked repo access and stubbed the actual
+ * `<AppStack />`/`<AuthStack />` JSX as commented-out placeholders — see
+ * MIGRATION_NOTES.md). That meant nothing in the app was reachable: every
+ * screen built across Clusters A-D existed but could never actually be
+ * navigated to from a cold launch. Fixed here because Task E.1's own
+ * acceptance criteria depend on the tracking screens being reachable
+ * (manual/device testing, the mandatory performance spike) — this isn't
+ * new scope, it's an existing gap directly blocking this task's own
+ * deliverables.
  *
  * By the time this mounts, App.tsx has already awaited isHydrated === true
- * (see App.tsx), so isAuthenticated below reflects a real secure-storage
- * read rather than A.1's stub.
+ * (see App.tsx), so isAuthenticated/role below reflect a real
+ * secure-storage read, not a stub.
  */
 export function RootSwitch() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const logoutReason = useAuthStore((s) => s.logoutReason);
-  const clearLogoutReason = useAuthStore((s) => s.clearLogoutReason);
+  const role = useAuthStore((s) => s.role);
 
-  if (isAuthenticated) {
-    return null; // return <AppStack />;
+  if (!isAuthenticated) {
+    // Forced logout (expired refresh token) is recorded in
+    // `authStore.logoutReason` for PhoneEntryScreen to read directly from
+    // the store and clear once displayed — kept out of RootSwitch since
+    // AuthStack's param list has no route for it and this component has
+    // no business owning that display logic.
+    return <AuthStack />;
   }
 
-  // Forced logout (expired refresh token) routes here with a message.
-  // clearLogoutReason() should be called once PhoneEntryScreen has read
-  // and displayed it, so it doesn't reappear on a later, unrelated visit
-  // to this screen.
-  const sessionExpiredMessage =
-    logoutReason === 'expired' ? 'Your session expired — please sign in again.' : undefined;
-
-  void clearLogoutReason; // wire this call into PhoneEntryScreen's onMount instead of here
-  void sessionExpiredMessage;
-
-  return null; // return <AuthStack initialParams={{ sessionExpiredMessage }} />;
+  switch (role) {
+    case 'shipper':
+      return <ShipperStack />;
+    case 'transporter':
+      return <TransporterStack />;
+    case 'admin':
+      return <AdminStack />;
+    default:
+      // Authenticated but no (or an invalid) role on the session object —
+      // treat as logged out rather than crash or render a blank screen.
+      return <AuthStack />;
+  }
 }
+
+export default RootSwitch;

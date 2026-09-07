@@ -20,6 +20,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // a managed Expo Go app — required because background GPS tracking
     // (a later task) needs native modules that Expo Go can't load.
     'expo-dev-client',
+    // @rnmapbox/maps (task E.1) — the NATIVE map binding used by the live
+    // tracking screens, distinct from D.1's REST-only geocoding usage.
+    // First task to actually exercise this native module; a native
+    // rebuild (`expo prebuild` / `expo run:ios` / `expo run:android`) is
+    // required after installing/configuring it — plain Metro reload is
+    // not sufficient, since this links native iOS/Android code.
+    [
+      '@rnmapbox/maps',
+      {
+        // Mapbox's SDK *download* token — distinct from the public
+        // runtime access token in `extra.mapboxAccessToken` below.
+        // Required at BUILD time to pull the native Mapbox SDK; get it
+        // from a Mapbox account token with the "Downloads:Read" scope
+        // (see @rnmapbox/maps' install docs). Deliberately NOT prefixed
+        // `EXPO_PUBLIC_` — it must never ship in the client bundle, only
+        // read by this config-plugin step, so it's sourced from the
+        // build/CI environment instead.
+        RNMapboxMapsDownloadToken: process.env.MAPBOX_DOWNLOAD_TOKEN ?? '',
+      },
+    ],
   ],
   extra: {
     // Backend base URL / env wiring lands here once the OpenAPI contract

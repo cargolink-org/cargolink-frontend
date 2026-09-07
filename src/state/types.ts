@@ -118,9 +118,36 @@ export interface Notification {
   createdAt?: string;
 }
 
-export type ConnectionState = 'connecting' | 'live' | 'offline' | 'error';
+/**
+ * Live-tracking connection state machine (Task E.1). Explicit transitions
+ * only — no ad hoc booleans, per the task's architecture requirement:
+ * 'connecting' (initial / re-establishing after a room join) -> 'live'
+ * (receiving updates normally) -> 'reconnecting' (a disconnect happened,
+ * backoff in progress) -> 'lost' (reconnect attempts exhausted).
+ *
+ * PREVIOUSLY (A.2 scaffold): `'connecting' | 'live' | 'offline' | 'error'`.
+ * Replaced with the 4-state machine `sockets.ts`/the task spec actually
+ * requires — no other file referenced 'offline'/'error' at the time of
+ * this change (verified), so this is a clean replacement, not a migration.
+ */
+export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'lost';
 
 export interface LatLng {
   latitude: number;
   longitude: number;
+}
+
+/**
+ * Wire shape of the `location:update` Socket.io event payload (Task E.1,
+ * technical spec §2.4) — `lat`/`lng` deliberately NOT `LatLng`'s
+ * `latitude`/`longitude` naming, since this mirrors the socket wire
+ * contract exactly (same convention as `MatchResult`/`PostLoadPayload`
+ * elsewhere: wire shapes keep the backend's field names; `LatLng` is the
+ * UI/map-facing shape, converted at the boundary in `TrackingScreen`).
+ */
+export interface LocationUpdatePayload {
+  lat: number;
+  lng: number;
+  /** ISO8601 timestamp string. */
+  ts: string;
 }

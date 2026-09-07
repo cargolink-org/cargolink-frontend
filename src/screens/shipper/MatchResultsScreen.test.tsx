@@ -84,6 +84,7 @@ describe('MatchResultsScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('FareQuoteScreen', {
       loadId: 'load-1',
       vehicleId: 'vehicle-1',
+      eta: '12 min',
     });
   });
 

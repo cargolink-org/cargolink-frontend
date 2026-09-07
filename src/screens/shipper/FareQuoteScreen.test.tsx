@@ -22,7 +22,7 @@ const mockAcceptMatch = acceptMatch as jest.Mock;
 const mockNavigate = jest.fn();
 const navigation = { navigate: mockNavigate } as any;
 const route = {
-  params: { loadId: 'load-1', vehicleId: 'vehicle-1' },
+  params: { loadId: 'load-1', vehicleId: 'vehicle-1', eta: '12 min' },
   key: 'FareQuoteScreen',
   name: 'FareQuoteScreen',
 } as any;
@@ -81,7 +81,11 @@ describe('FareQuoteScreen', () => {
     fireEvent.press(screen.getByTestId('fare-quote-accept-button'));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('Tracking', { loadId: 'load-1' });
+      expect(mockNavigate).toHaveBeenCalledWith('Tracking', {
+        loadId: 'load-1',
+        vehicleId: 'vehicle-1',
+        eta: '12 min',
+      });
     });
     expect(useLoadStore.getState().acceptedMatch).toEqual({ match_id: 'match-999', status: 'accepted' });
     expect(mockAcceptMatch).toHaveBeenCalledWith('load-1', 'vehicle-1');

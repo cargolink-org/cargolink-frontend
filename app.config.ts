@@ -40,6 +40,33 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         RNMapboxMapsDownloadToken: process.env.MAPBOX_DOWNLOAD_TOKEN ?? '',
       },
     ],
+    // expo-location (Task E.2) — background GPS streaming for the
+    // transporter role. `isIosBackgroundLocationEnabled` adds the
+    // `location` UIBackgroundModes entry to Info.plist;
+    // `isAndroidBackgroundLocationEnabled` adds
+    // ACCESS_BACKGROUND_LOCATION (and, since
+    // `isAndroidForegroundServiceEnabled` is left unset, defaults ON
+    // too — see the plugin's own default-inheritance behavior — adding
+    // FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION, both required
+    // for the persistent notification `location.ts`'s
+    // `startLocationUpdatesAsync({ foregroundService: {...} })` call
+    // shows on Android 8+ while a trip is active).
+    //
+    // The permission COPY here intentionally matches
+    // `LocationPermissionPrompt`'s in-app primer's rationale — a
+    // consistent story between the primer shown before this dialog and
+    // the OS dialog's own text, rather than two different explanations.
+    [
+      'expo-location',
+      {
+        locationAlwaysAndWhenInUsePermission:
+          'CargoLink uses your location so shippers can see your delivery progress in real time while a trip is active. Location is never streamed outside of an active trip.',
+        locationWhenInUsePermission:
+          'CargoLink uses your location so shippers can see your delivery progress in real time while a trip is active.',
+        isIosBackgroundLocationEnabled: true,
+        isAndroidBackgroundLocationEnabled: true,
+      },
+    ],
   ],
   extra: {
     // Backend base URL / env wiring lands here once the OpenAPI contract

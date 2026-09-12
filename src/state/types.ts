@@ -151,3 +151,26 @@ export interface LocationUpdatePayload {
   /** ISO8601 timestamp string. */
   ts: string;
 }
+
+/**
+ * Wire shape of the OUTGOING `location_update` Socket.io event (Task E.2,
+ * technical spec §2.4's `python-socketio` `@sio.event async def
+ * location_update(sid, data)` handler) — the transporter-emitted
+ * counterpart to `LocationUpdatePayload` above.
+ *
+ * Deliberately a separate type rather than reusing `LocationUpdatePayload`:
+ * the backend's incoming handler needs `load_id` to know which room to
+ * broadcast into (`room=f"load:{data['load_id']}"`) and `vehicle_id` to
+ * identify the source vehicle — neither is present on the room-scoped
+ * RECEIVE side, where room membership already implies the load. The
+ * underscore-vs-colon event name difference (`location_update` in,
+ * `location:update` out) is the backend's own naming, not a typo here.
+ */
+export interface LocationEmitPayload {
+  load_id: string;
+  vehicle_id: string;
+  lat: number;
+  lng: number;
+  /** ISO8601 timestamp string. */
+  ts: string;
+}

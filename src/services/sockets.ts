@@ -35,15 +35,20 @@
  * - Reconnect/backoff is modeled as an explicit state machine
  *   ('connecting' -> 'live' -> 'reconnecting' -> 'lost'), matching
  *   `ConnectionState` in `state/types.ts` — no ad hoc booleans.
+ * - Task E.2 adds `emitLocationUpdate()`, the OUTGOING counterpart to
+ *   `onLocationUpdate()` — used by `location.ts`'s background task to
+ *   send the transporter's position over this same singleton connection.
+ *   Nothing else in this module changes: E.2 sends through the existing
+ *   room/connection, it doesn't add a second one.
  */
 
 import { io, type Socket } from 'socket.io-client';
 
 import { useAuthStore } from '../state/authStore';
 import { createSimulatedEmitter, type SimulatedEmitter } from '../mocks/simulatedRoute';
-import type { ConnectionState, LocationUpdatePayload } from '../state/types';
+import type { ConnectionState, LocationEmitPayload, LocationUpdatePayload } from '../state/types';
 
-export type { LocationUpdatePayload };
+export type { LocationEmitPayload, LocationUpdatePayload };
 
 const ENV_MOCK_MODE = process.env.EXPO_PUBLIC_MOCK_MODE === 'true';
 const SOCKET_URL =
@@ -80,7 +85,15 @@ function emitConnectionState(next: ConnectionState) {
   connectionListeners.forEach((listener) => listener(next));
 }
 
-function emitLocationUpdate(payload: LocationUpdatePayload) {
+/**
+ * Dispatches a RECEIVED `location:update` event to local subscribers
+ * (`onLocationUpdate` listeners) — renamed from the original `emitLocationUpdate`
+ * (Task E.1) to `dispatchLocationUpdate` here in Task E.2, to free up the
+ * `emitLocationUpdate` name for the new public, OUTGOING-emit function
+ * below, which is the more natural fit for that name (it actually emits
+ * over the wire; this one only fans out to in-process listeners).
+ */
+function dispatchLocationUpdate(payload: LocationUpdatePayload) {
   locationListeners.forEach((listener) => listener(payload));
 }
 
@@ -145,7 +158,7 @@ function connectReal() {
   });
 
   socket.on('location:update', (payload: LocationUpdatePayload) => {
-    emitLocationUpdate(payload);
+    dispatchLocationUpdate(payload);
   });
 
   socket.on('disconnect', () => {
@@ -161,7 +174,7 @@ function connectReal() {
 
 function connectSimulated() {
   simulatedEmitter = createSimulatedEmitter({
-    onLocationUpdate: emitLocationUpdate,
+    onLocationUpdate: dispatchLocationUpdate,
     onConnectionStateChange: (state) => {
       emitConnectionState(state);
       if (state === 'live') reconnectAttempts = 0;
@@ -238,6 +251,41 @@ export function onConnectionStateChange(listener: ConnectionListener): () => voi
 
 export function getConnectionState(): ConnectionState {
   return connectionState;
+}
+
+/**
+ * Emits a `location_update` event FROM the client, over this module's
+ * existing singleton connection (Task E.2) — the transporter-side
+ * counterpart to `onLocationUpdate`'s receive path. `location.ts` is the
+ * only caller; it never opens a second connection of its own, per Task
+ * E.2's "single transmission path" architecture requirement.
+ *
+ * Returns `true` when the emission was handed off successfully and the
+ * caller does NOT need to buffer it; `false` when the caller should
+ * buffer and retry later.
+ *
+ * - MOCK_MODE (Sprint 4 scope, unchanged from E.1's simulated-stream
+ *   precedent): always returns `true`. There is no real
+ *   `python-socketio` `location_update` handler to hit yet on the
+ *   frontend's side — Sprint 4's mock is the TRANSMISSION TARGET, not
+ *   the GPS acquisition above this call (that part is real, see
+ *   `location.ts`). Treating every mock-mode emit as accepted mirrors
+ *   how `connectSimulated()` above always reports 'live' rather than
+ *   modelling a fake server that can reject requests.
+ * - Real mode: requires an already-connected socket (`joinRoom()` must
+ *   have been called — by the transporter's own `TrackingScreen`, or by
+ *   `location.ts` itself when a trip starts while that screen isn't
+ *   mounted). Returns `false` if there's no live socket to emit on.
+ */
+export function emitLocationUpdate(payload: LocationEmitPayload): boolean {
+  if (isMockMode()) {
+    return true;
+  }
+  if (!socket || connectionState !== 'live') {
+    return false;
+  }
+  socket.emit('location_update', payload);
+  return true;
 }
 
 /* ------------------------------------------------------------------ *

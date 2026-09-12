@@ -107,3 +107,76 @@ export async function getTrackingHistory(
 ): Promise<TrackingHistoryPoint[]> {
   return MOCK_MODE ? getTrackingHistoryMock() : getTrackingHistoryViaApi(vehicleId, params);
 }
+
+/* ------------------------------------------------------------------ *
+ * POST /tracking/ping — Task E.2 REST fallback for buffered pings
+ *
+ * Only used when `location.ts`'s primary path (a Socket.io
+ * `location_update` emit — see `services/sockets.ts`'s `emitLocationUpdate`)
+ * has been unable to reach a live connection and its local buffer is full.
+ * NOT part of the steady-state transmission flow. Route/shape are pending
+ * contract confirmation — the technical spec's §5 endpoint table doesn't
+ * list this route yet; named/shaped to match the existing
+ * `/tracking/{vehicleId}` GET's conventions in the meantime. Kept
+ * isolated here so it's obvious this is a fallback, not the primary
+ * flow, and easy to re-point once Dinesh's OpenAPI contract confirms the
+ * real shape.
+ * ------------------------------------------------------------------ */
+
+export interface TrackingPingPayload {
+  load_id: string;
+  vehicle_id: string;
+  lat: number;
+  lng: number;
+  /** ISO8601 timestamp. */
+  ts: string;
+}
+
+export interface PostTrackingPingBatchResponse {
+  acknowledged: boolean;
+}
+
+/** Mock: accepts and echoes back a success acknowledgment, per the task's
+ * API Requirements ("Mock implementation: accepts and echoes back a
+ * success acknowledgment for testing the flush-on-reconnect path"). */
+function mockPostTrackingPingBatch(pings: TrackingPingPayload[]): Promise<PostTrackingPingBatchResponse> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve({ acknowledged: pings.length > 0 }), 200);
+  });
+}
+
+/** Exported for direct testing, same reasoning as `getTrackingHistoryViaApi`
+ * above. */
+export async function postTrackingPingBatchViaApi(
+  pings: TrackingPingPayload[]
+): Promise<PostTrackingPingBatchResponse> {
+  const { data } = await apiClient.post<PostTrackingPingBatchResponse>('/tracking/ping', { pings });
+  return data;
+}
+
+export async function postTrackingPingBatchMock(
+  pings: TrackingPingPayload[]
+): Promise<PostTrackingPingBatchResponse> {
+  return mockPostTrackingPingBatch(pings);
+}
+
+/**
+ * Flushes a batch of buffered pings via REST. Unlike the other functions
+ * in this file, this NEVER rejects — it swallows any network/server
+ * error and resolves `{ acknowledged: false }` instead. This is
+ * deliberate: `location.ts` calls this as a best-effort fallback attempt
+ * from inside its own buffering logic, and treating "the fallback also
+ * failed" as a normal, retriable outcome (rather than an exception every
+ * call site must remember to catch) is a better fit for a background
+ * task than throwing would be.
+ */
+export async function postTrackingPingBatch(
+  pings: TrackingPingPayload[]
+): Promise<PostTrackingPingBatchResponse> {
+  if (pings.length === 0) return { acknowledged: true };
+  try {
+    return MOCK_MODE ? await postTrackingPingBatchMock(pings) : await postTrackingPingBatchViaApi(pings);
+  } catch {
+    return { acknowledged: false };
+  }
+}

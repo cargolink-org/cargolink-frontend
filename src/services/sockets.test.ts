@@ -232,6 +232,74 @@ describe('sockets.ts', () => {
     });
   });
 
+  describe('emitLocationUpdate (Task E.2 — outgoing send path)', () => {
+    it('MOCK_MODE: always returns true (no real transmission target yet, Sprint 4 scope)', () => {
+      sockets.__setMockModeForTests(true);
+      sockets.joinRoom('load-1');
+      jest.advanceTimersByTime(300);
+
+      const sent = sockets.emitLocationUpdate({
+        load_id: 'load-1',
+        vehicle_id: 'veh-1',
+        lat: 12.9,
+        lng: 77.6,
+        ts: 'now',
+      });
+
+      expect(sent).toBe(true);
+    });
+
+    it('real mode, connected: emits location_update on the socket and returns true', () => {
+      sockets.__setMockModeForTests(false);
+      const fakeSocket = createFakeSocket();
+      mockIo.mockReturnValue(fakeSocket);
+
+      sockets.joinRoom('load-1');
+      fakeSocket.__trigger('connect');
+
+      const payload = { load_id: 'load-1', vehicle_id: 'veh-1', lat: 12.9, lng: 77.6, ts: 'now' };
+      const sent = sockets.emitLocationUpdate(payload);
+
+      expect(sent).toBe(true);
+      expect(fakeSocket.emit).toHaveBeenCalledWith('location_update', payload);
+    });
+
+    it('real mode, not connected (no room joined): returns false without throwing', () => {
+      sockets.__setMockModeForTests(false);
+
+      const sent = sockets.emitLocationUpdate({
+        load_id: 'load-1',
+        vehicle_id: 'veh-1',
+        lat: 12.9,
+        lng: 77.6,
+        ts: 'now',
+      });
+
+      expect(sent).toBe(false);
+    });
+
+    it('real mode, disconnected mid-trip: returns false once connectionState drops out of live', () => {
+      sockets.__setMockModeForTests(false);
+      const fakeSocket = createFakeSocket();
+      mockIo.mockReturnValue(fakeSocket);
+
+      sockets.joinRoom('load-1');
+      fakeSocket.__trigger('connect');
+      fakeSocket.__trigger('disconnect');
+      expect(sockets.getConnectionState()).toBe('reconnecting');
+
+      const sent = sockets.emitLocationUpdate({
+        load_id: 'load-1',
+        vehicle_id: 'veh-1',
+        lat: 12.9,
+        lng: 77.6,
+        ts: 'now',
+      });
+
+      expect(sent).toBe(false);
+    });
+  });
+
   describe('listener cleanup', () => {
     it('onLocationUpdate/onConnectionStateChange unsubscribe functions stop further delivery', () => {
       sockets.__setMockModeForTests(true);

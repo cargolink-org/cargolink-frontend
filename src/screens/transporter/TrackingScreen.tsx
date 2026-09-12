@@ -6,6 +6,7 @@ import Mapbox from '@rnmapbox/maps';
 import type { TransporterStackParamList } from '../../navigation/types';
 import { getTrackingHistory, isGetTrackingHistoryError } from '../../api/tracking';
 import * as sockets from '../../services/sockets';
+import * as location from '../../services/location';
 import {
   useTrackingStore,
   useTrackingPosition,
@@ -13,6 +14,7 @@ import {
   useTrackingLastUpdatedAt,
 } from '../../state/trackingStore';
 import { MapMarker } from '../../components/MapMarker';
+import { LocationPermissionPrompt, type LocationPermissionPromptStep } from '../../components/LocationPermissionPrompt';
 import { getLastSeenLabel } from '../../utils/formatters';
 import type { LatLng } from '../../state/types';
 
@@ -23,18 +25,28 @@ function toLatLng(point: { lat: number; lng: number }): LatLng {
 }
 
 /**
- * TrackingScreen (transporter variant) — Task E.1.
+ * TrackingScreen (transporter variant) — Task E.1, extended by Task E.2.
  *
- * Shows the transporter's own live position. In production this is fed by
- * Task E.2's background-location task (the transporter's device IS the
- * source of the location, not a subscriber to someone else's); per the
- * Sprint 4 sprint-plan scope and this task's own Dependencies section,
- * both this screen and E.2 are built against the SAME simulated-route
- * mechanism for now, so this screen subscribes to `sockets.ts` exactly
- * like the shipper variant does. Swapping to a real device GPS feed as
- * E.2 comes online is expected to happen inside `sockets.ts`/E.2, not
- * here — this screen only cares about "what is my current position,"
- * regardless of source.
+ * Shows the transporter's own live position. The position feed itself is
+ * unchanged from E.1: this screen subscribes to `sockets.ts`'s
+ * `onLocationUpdate`/`onConnectionStateChange`, the same as the shipper
+ * variant — it only cares about "what is my current position," not where
+ * it came from. What Task E.2 adds is the SOURCE side: "Start Trip" now
+ * starts `location.ts`'s real background GPS task (device location,
+ * throttled 5–10s), which emits back into this same connection via
+ * `sockets.ts`'s `emitLocationUpdate`. Per Sprint 4 scope, the
+ * TRANSMISSION TARGET is still mocked (see `sockets.ts`'s
+ * `emitLocationUpdate` doc comment) — the GPS acquisition above it is
+ * real.
+ *
+ * Connection-ownership note (Task E.2): once a trip is started,
+ * `location.ts` owns keeping the underlying room/connection alive
+ * independent of whether THIS screen is mounted (background task must
+ * survive navigation/backgrounding). This screen's unmount cleanup below
+ * only calls `sockets.leaveRoom()` when no trip is actively tracking —
+ * otherwise it would tear down the very connection the background task
+ * depends on. See the matching comment in `location.ts`'s top-of-file
+ * doc.
  *
  * Route-line/pickup-destination context is intentionally NOT drawn here:
  * no data source yet exists on the transporter's session for an accepted
@@ -56,6 +68,25 @@ export default function TrackingScreen({ route }: Props) {
 
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [, forceTick] = React.useReducer((n: number) => n + 1, 0);
+
+  // Task E.2 — trip lifecycle state. `isTripTracking` mirrors
+  // `location.getTrackingStatus().isTracking` in React state so the
+  // Start/End Trip button re-renders correctly; it's re-synced from
+  // `location.ts` (the source of truth) rather than assumed, since a
+  // background task's real status can change from outside a button press
+  // (e.g. permission loss doesn't end the trip, but a crash-recovery
+  // remount should still reflect whatever `location.ts` currently says).
+  const [isTripTracking, setIsTripTracking] = React.useState(() => location.getTrackingStatus().isTracking);
+  const [isStartingTrip, setIsStartingTrip] = React.useState(false);
+  const [permissionRevoked, setPermissionRevoked] = React.useState(
+    () => location.getTrackingStatus().permissionRevoked
+  );
+  const [promptVisible, setPromptVisible] = React.useState(false);
+  const [promptStep, setPromptStep] = React.useState<LocationPermissionPromptStep>('primer');
+
+  React.useEffect(() => {
+    return location.onPermissionRevokedChange(setPermissionRevoked);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -87,7 +118,15 @@ export default function TrackingScreen({ route }: Props) {
       cancelled = true;
       unsubscribeLocation();
       unsubscribeConnection();
-      sockets.leaveRoom();
+      // Task E.2: a trip started via "Start Trip" owns this connection
+      // independent of this screen's mount state — only tear the room
+      // down here if no trip is actively tracking; otherwise leaving
+      // this screen (backgrounding the app, navigating to Checkpoints,
+      // etc.) would kill the very connection the background task
+      // depends on. See this file's top comment and location.ts's.
+      if (!location.getTrackingStatus().isTracking) {
+        sockets.leaveRoom();
+      }
       reset();
     };
     // See the shipper variant's identical comment: no AppState-driven
@@ -121,6 +160,55 @@ export default function TrackingScreen({ route }: Props) {
     // this task's. A placeholder confirms the affordance is reachable and
     // wired without navigating to a route that doesn't exist yet.
     Alert.alert('Checkpoint updates', 'Checkpoint status updates ship in Cluster F.');
+  };
+
+  // Task E.2 — "Start Trip" shows the permission primer first (UI
+  // Requirements: explain WHY before the OS dialog fires), rather than
+  // requesting permission directly.
+  const handleStartTripPress = () => {
+    setPromptStep('primer');
+    setPromptVisible(true);
+  };
+
+  const handlePromptContinue = async () => {
+    setIsStartingTrip(true);
+    try {
+      const result = await location.startBackgroundTracking({ loadId, vehicleId });
+      if (result.started) {
+        setPromptVisible(false);
+        setIsTripTracking(true);
+        if (result.backgroundGranted === false) {
+          // Foreground-only permission: proceed, but be upfront that
+          // updates will pause once backgrounded (edge case from the
+          // task spec — not a hard blocker, but must not be silent).
+          Alert.alert(
+            'Background tracking limited',
+            'Live tracking will pause while the app is backgrounded, until background location is enabled in Settings.'
+          );
+        }
+      } else if (result.reason === 'permission_denied') {
+        setPromptStep('denied');
+      } else {
+        // already_tracking — a trip is already running (e.g. resumed
+        // after a remount); reflect that rather than re-prompting.
+        setPromptVisible(false);
+        setIsTripTracking(true);
+      }
+    } catch {
+      setPromptVisible(false);
+      Alert.alert('Could not start trip', 'Something went wrong starting live tracking. Please try again.');
+    } finally {
+      setIsStartingTrip(false);
+    }
+  };
+
+  const handlePromptDismiss = () => {
+    setPromptVisible(false);
+  };
+
+  const handleEndTripPress = async () => {
+    await location.stopBackgroundTracking();
+    setIsTripTracking(false);
   };
 
   return (
@@ -170,6 +258,33 @@ export default function TrackingScreen({ route }: Props) {
         </Text>
       )}
 
+      {permissionRevoked && (
+        <View
+          style={styles.permissionWarningBanner}
+          accessibilityRole="alert"
+          testID="tracking-permission-revoked-banner"
+        >
+          <Text style={styles.permissionWarningText}>
+            Location access was turned off — the shipper can no longer see your live position.
+          </Text>
+        </View>
+      )}
+
+      <Pressable
+        style={[styles.tripButton, isTripTracking ? styles.tripButtonEnd : styles.tripButtonStart]}
+        onPress={isTripTracking ? handleEndTripPress : handleStartTripPress}
+        disabled={isStartingTrip}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isStartingTrip }}
+        testID={isTripTracking ? 'tracking-end-trip' : 'tracking-start-trip'}
+      >
+        {isStartingTrip ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <Text style={styles.tripButtonLabel}>{isTripTracking ? 'End Trip' : 'Start Trip'}</Text>
+        )}
+      </Pressable>
+
       <Pressable
         style={styles.checkpointButton}
         onPress={handleCheckpointQuickAccess}
@@ -182,6 +297,13 @@ export default function TrackingScreen({ route }: Props) {
       <Text style={styles.loadIdText} testID="tracking-load-id">
         Load ID: {loadId}
       </Text>
+
+      <LocationPermissionPrompt
+        visible={promptVisible}
+        step={promptStep}
+        onContinue={handlePromptContinue}
+        onDismiss={handlePromptDismiss}
+      />
     </View>
   );
 }
@@ -222,6 +344,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
+  permissionWarningBanner: {
+    backgroundColor: '#FCEBEA',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  permissionWarningText: { fontSize: 12, color: '#B3261E', fontWeight: '600' },
+  tripButton: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  tripButtonStart: { backgroundColor: '#1B7A34' },
+  tripButtonEnd: { backgroundColor: '#B3261E' },
+  tripButtonLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   checkpointButton: {
     marginHorizontal: 16,
     marginBottom: 12,

@@ -11,6 +11,12 @@ const STATUS_CONFIG: Record<DocumentStatus, { label: string; bg: string; fg: str
   pending: { label: 'Pending', bg: '#FFF3CD', fg: '#8A6D00' },
   uploaded: { label: 'Uploaded', bg: '#DCEBFF', fg: '#0B5FCC' },
   verified: { label: 'Verified', bg: '#DFF6E4', fg: '#1B7A34' },
+  // Added task F.1 — the shipment-document checklist's terminal state
+  // (Module 4.5a), one step past 'verified'. Distinct color (teal, not
+  // green) so it doesn't read as a duplicate of 'verified' at a glance —
+  // see state/vehicleStore.ts's DocumentStatus doc comment for why this
+  // is an extension of the shared type, not a forked badge.
+  cleared: { label: 'Cleared', bg: '#D6F3F1', fg: '#0E7C74' },
   rejected: { label: 'Rejected', bg: '#FBE0E0', fg: '#B3261E' },
 };
 

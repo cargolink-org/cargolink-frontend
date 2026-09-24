@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react-native';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react-native';
 
 import TrackingScreen from './TrackingScreen';
 import { getTrackingHistory } from '../../api/tracking';
@@ -29,7 +29,7 @@ const route = {
   key: 'Tracking',
   name: 'Tracking',
 } as any;
-const navigation = {} as any;
+const navigation = { navigate: jest.fn() } as any;
 
 function resetTrackingStore() {
   useTrackingStore.setState({ currentPosition: null, connectionState: 'connecting', lastUpdatedAt: null });
@@ -180,5 +180,20 @@ describe('TrackingScreen (shipper variant)', () => {
 
     await waitFor(() => expect(mockJoinRoom).toHaveBeenCalledWith('load-2'));
     expect(mockLeaveRoom).toHaveBeenCalled(); // old room torn down first
+  });
+
+  it('navigates to the shared shipment-details screens from their quick-access buttons', () => {
+    // Task F.1 — the shipper never sees a checkpoint-UPDATE action, but
+    // can still view the timeline (and documents/container).
+    render(<TrackingScreen route={route} navigation={navigation} />);
+
+    fireEvent.press(screen.getByTestId('tracking-documents-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('DocumentChecklist', { loadId: 'load-1' });
+
+    fireEvent.press(screen.getByTestId('tracking-checkpoints-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('CheckpointTimeline', { loadId: 'load-1' });
+
+    fireEvent.press(screen.getByTestId('tracking-container-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('ContainerDetails', { loadId: 'load-1' });
   });
 });

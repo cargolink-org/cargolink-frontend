@@ -1,4 +1,5 @@
 import type { VehicleType } from '../validation/vehicleSchema';
+import type { DocumentStatus } from './vehicleStore';
 
 export type UserRole = 'shipper' | 'transporter' | 'admin';
 
@@ -93,30 +94,214 @@ export interface AcceptedMatch {
   status: string;
 }
 
-export interface ShipmentDocumentsState {
-  invoiceUrl?: string;
-  ewayBillUrl?: string;
-  podUrl?: string;
+/**
+ * Per-shipment document types — Task F.1 (source doc Module 4.5a).
+ *
+ * PREVIOUSLY (A.2 scaffold): a generic `ShipmentDocumentsState` placeholder
+ * (`{ invoiceUrl?, ewayBillUrl?, podUrl? }`) that didn't match either the
+ * source doc's named checklist or the `shipment_documents` table's
+ * `doc_type TEXT` column. Replaced here with the actual checklist from
+ * Module 4.5a. Deliberately DISTINCT from `DOCUMENT_TYPES` in
+ * `validation/documentUploadSchema.ts` (task C.2's vehicle/compliance
+ * documents, `documents` table, keyed by `owner_id`) — this set is
+ * per-shipment (`shipment_documents` table, keyed by `load_id`); do not
+ * merge the two concerns. No other file referenced the old shape at the
+ * time of this change (verified), so this is a clean replacement.
+ */
+export const SHIPMENT_DOCUMENT_TYPES = [
+  'commercial_invoice',
+  'packing_list',
+  'bill_of_lading',
+  'customs_clearance_certificate',
+  'certificate_of_origin',
+] as const;
+export type ShipmentDocumentType = (typeof SHIPMENT_DOCUMENT_TYPES)[number];
+
+export const SHIPMENT_DOCUMENT_TYPE_LABELS: Record<ShipmentDocumentType, string> = {
+  commercial_invoice: 'Commercial Invoice',
+  packing_list: 'Packing List',
+  bill_of_lading: 'Bill of Lading / Airway Bill',
+  customs_clearance_certificate: 'Customs Clearance Certificate',
+  certificate_of_origin: 'Certificate of Origin',
+};
+
+/**
+ * A single per-shipment document's state, as rendered on
+ * `DocumentChecklistScreen`. `status` reuses `vehicleStore`'s
+ * `DocumentStatus` (task C.2) rather than a forked shipment-only status
+ * type — `DocumentStatusBadge` is required to be reused unmodified, and a
+ * second status enum would fork the badge's rendering logic by the back
+ * door. `DocumentStatus` was extended (not forked) in task F.1 to add
+ * `'cleared'`, since the source doc's shipment-document progression
+ * (Pending -> Uploaded -> Verified -> Cleared) has one more terminal state
+ * than C.2's vehicle-document progression ever needed. See
+ * `state/vehicleStore.ts` for the extended union and
+ * `components/DocumentStatusBadge.tsx` for the added visual treatment.
+ */
+export interface ShipmentDocument {
+  docType: ShipmentDocumentType;
+  status: DocumentStatus;
+  fileUrl?: string | null;
+  rejectionReason?: string | null;
 }
 
-export interface CheckpointsState {
-  pickupReached?: boolean;
-  loaded?: boolean;
-  delivered?: boolean;
+/**
+ * Checkpoint sequence — Task F.1 (source doc Module 4.5b). Month 1 MVP
+ * scope: manual updates only at these five defined stages, no live
+ * port/customs API integration (Future Enhancements section).
+ *
+ * PREVIOUSLY (A.2 scaffold): a generic `CheckpointsState` placeholder
+ * (`{ pickupReached?, loaded?, delivered? }`) that didn't match the source
+ * doc's named sequence. No other file referenced the old shape at the time
+ * of this change (verified).
+ */
+export const CHECKPOINT_NAMES = [
+  'origin_warehouse',
+  'port_border',
+  'customs_hold',
+  'cleared',
+  'destination',
+] as const;
+export type CheckpointName = (typeof CHECKPOINT_NAMES)[number];
+
+export const CHECKPOINT_NAME_LABELS: Record<CheckpointName, string> = {
+  origin_warehouse: 'Origin warehouse',
+  port_border: 'Port / border',
+  customs_hold: 'Customs hold',
+  cleared: 'Cleared',
+  destination: 'Destination',
+};
+
+/**
+ * ASSUMPTION (flag for review at contract freeze, same category as the
+ * `checkpoint_updates` route/shape items already flagged pending Dinesh in
+ * this task): the technical spec's `POST /checkpoints/{loadId} {
+ * checkpoint_name, status }` shows `status` as a field distinct from
+ * `checkpoint_name`, but never defines its own value set — only that it is
+ * "similarly constrained" (task spec, API Requirements) to an enum, not
+ * free text. Modeled here as the minimal two-value enum a Month-1-MVP
+ * manual-update flow actually needs: a checkpoint stage is either not yet
+ * reached ('pending', the implicit default when no update exists for it)
+ * or has been reached ('completed'). The "Update Status" action always
+ * posts `'completed'` for the stage the transporter selects — there is no
+ * UI for posting `'pending'` explicitly, since reaching a checkpoint is a
+ * one-way transition in this MVP. Revisit if Dinesh's frozen contract
+ * defines a richer status set (e.g. a `'delayed'` state).
+ */
+export const CHECKPOINT_STATUSES = ['pending', 'completed'] as const;
+export type CheckpointStatus = (typeof CHECKPOINT_STATUSES)[number];
+
+/**
+ * Wire shape of one checkpoint update — both the `POST
+ * /checkpoints/{loadId}` request body and one item of the (spec-implied,
+ * not explicitly listed — see `api/checkpoints.ts`'s top-of-file
+ * assumption note) `GET` response. `checkpoint_id`/`timestamp` are
+ * server-assigned and absent on an outbound post.
+ */
+export interface CheckpointUpdate {
+  checkpoint_id?: string;
+  checkpoint_name: CheckpointName;
+  status: CheckpointStatus;
+  /** ISO8601 timestamp string, server-assigned. */
+  timestamp?: string;
 }
 
-export interface ContainerState {
-  containerNumber?: string;
-  sealNumber?: string;
+/**
+ * `containers` table shape (technical spec §4) — sea/air cargo only,
+ * explicitly distinguished from the road-vehicle GPS tracking in Cluster E
+ * (source doc Module 4.5c). `null` (not an empty object) represents "no
+ * container record exists for this load" — a normal, non-error outcome
+ * for a domestic-only road shipment, rendered as `ContainerDetailsScreen`'s
+ * "not applicable" empty state rather than a broken/blank render.
+ *
+ * PREVIOUSLY (A.2 scaffold): a generic `ContainerState` placeholder
+ * (`{ containerNumber?, sealNumber? }`) — `sealNumber` isn't part of the
+ * `containers` table in either source doc; replaced with the table's
+ * actual fields. No other file referenced the old shape at the time of
+ * this change (verified).
+ */
+export interface ContainerDetails {
+  containerNumber: string;
+  vesselOrFlight: string;
+  portOfLoading: string;
+  portOfDischarge: string;
 }
 
+/**
+ * Notification types — Task F.2 (source doc Module 4.7). The four
+ * notification categories the platform triggers server-side via
+ * SMS/email (MSG91/Gupshup, SendGrid); this in-app inbox is explicitly a
+ * complement to those channels, not a replacement ("SMS/email can be
+ * missed or filtered" — Frontend Implementation Guide, F.2).
+ */
+export const NOTIFICATION_TYPES = [
+  'booking_confirmation',
+  'pickup_confirmation',
+  'delay_alert',
+  'delivery_confirmation',
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  booking_confirmation: 'Booking confirmation',
+  pickup_confirmation: 'Pickup confirmation',
+  delay_alert: 'Delay alert',
+  delivery_confirmation: 'Delivery confirmation',
+};
+
+/**
+ * PREVIOUSLY (A.2 scaffold): `{ id, title, body?, read, createdAt? }` — a
+ * reasonable generic shape, but not aligned to the `notifications` table
+ * (`id, user_id, type, message, sent_at`) named in both the source doc and
+ * technical spec. Replaced here field-for-field with the table's actual
+ * columns (`type`/`message`/`sent_at` in place of `title`/`body`/
+ * `createdAt`). No other file referenced the old field names at the time
+ * of this change (verified) — `notificationStore.ts`'s logic only ever
+ * touched `id`/`read`, both unchanged, so the store itself needed no
+ * changes for this replacement.
+ *
+ * ASSUMPTION (flag for review at contract freeze — the most significant
+ * open item in task F.2, more so than any single item flagged in F.1):
+ * NEITHER source document defines a `read`/`read_at` column on the
+ * `notifications` table, nor lists ANY REST endpoint for notifications at
+ * all in the technical spec's §5 endpoint list — despite the table
+ * existing in the schema (§4) and F.2's own task description explicitly
+ * requiring read/unread tracking ("booking/pickup/delay/delivery
+ * notifications... badge count") AND cross-device read-state consistency
+ * ("marking-as-read race conditions if two devices are logged in" only
+ * makes sense if `read` is server-persisted, not purely local). `read` is
+ * modeled here as present on the wire response despite the schema gap —
+ * flag with Dinesh that the `notifications` table likely needs a `read`
+ * or `read_at` column added, and that `GET /notifications` /
+ * `POST /notifications/{id}/read` (see `api/notifications.ts`) are wholly
+ * inferred, unconfirmed routes.
+ */
 export interface Notification {
   id: string;
-  title: string;
-  body?: string;
+  type: NotificationType;
+  message: string;
+  /** ISO8601 timestamp string. */
+  sent_at: string;
   read: boolean;
-  createdAt?: string;
 }
+
+/**
+ * Notification channel preferences — Task F.2. "toggle channels (in-app/
+ * SMS/email) per notification category" (Frontend Implementation Guide,
+ * F.2's own phrasing already hedges this with "where the contract
+ * supports it" — no source document defines a preferences endpoint or
+ * storage shape at all; see `api/notifications.ts`'s ASSUMPTION note).
+ */
+export const NOTIFICATION_CHANNELS = ['in_app', 'sms', 'email'] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+export const NOTIFICATION_CHANNEL_LABELS: Record<NotificationChannel, string> = {
+  in_app: 'In-app',
+  sms: 'SMS',
+  email: 'Email',
+};
+
+export type NotificationPreferences = Record<NotificationType, Record<NotificationChannel, boolean>>;
 
 /**
  * Live-tracking connection state machine (Task E.1). Explicit transitions

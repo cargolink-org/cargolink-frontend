@@ -64,6 +64,22 @@ export type ShipperStackParamList = {
    * rather than a synthesized client-side estimate (see EtaBadge.tsx).
    */
   Tracking: { loadId: string; vehicleId: string; eta?: string };
+  /**
+   * Task F.1 — shared screens (screens/shared/), registered on both role
+   * stacks so each role's navigator can route into them; all three take
+   * only `loadId`, matching the confirmed/inferred endpoints' load_id
+   * scoping (`api/documents.ts`, `api/checkpoints.ts`).
+   */
+  DocumentChecklist: { loadId: string };
+  CheckpointTimeline: { loadId: string };
+  ContainerDetails: { loadId: string };
+  /**
+   * Task F.2 — notification inbox/preferences, also shared screens
+   * (screens/shared/). Neither takes a `loadId` — notifications are
+   * scoped to the signed-in user, not a single shipment.
+   */
+  NotificationInbox: undefined;
+  NotificationPreferences: undefined;
 };
 
 /**
@@ -89,4 +105,11 @@ export type TransporterStackParamList = {
    * for the current (dev/demo) entry point.
    */
   Tracking: { loadId: string; vehicleId: string };
+  /** Task F.1 — see ShipperStackParamList's matching entry for details. */
+  DocumentChecklist: { loadId: string };
+  CheckpointTimeline: { loadId: string };
+  ContainerDetails: { loadId: string };
+  /** Task F.2 — see ShipperStackParamList's matching entry for details. */
+  NotificationInbox: undefined;
+  NotificationPreferences: undefined;
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Mapbox from '@rnmapbox/maps';
 
@@ -43,7 +43,7 @@ function toLatLng(point: { lat: number; lng: number }): LatLng {
  * covered by the mount -> unmount -> remount test in
  * `TrackingScreen.test.tsx` instead.
  */
-export default function TrackingScreen({ route }: Props) {
+export default function TrackingScreen({ route, navigation }: Props) {
   const { loadId, vehicleId, eta } = route.params;
 
   const currentPosition = useTrackingPosition();
@@ -120,6 +120,22 @@ export default function TrackingScreen({ route }: Props) {
     }
   }, [connectionState, lastUpdatedAt]);
 
+  // Task F.1 — shipment-details quick-access handlers, mirrored on the
+  // transporter variant of this screen. The shipper never sees a
+  // checkpoint-UPDATE action (that's transporter-only, gated inside
+  // CheckpointTimelineScreen itself) but can still view the timeline.
+  const handleDocumentsQuickAccess = () => {
+    navigation.navigate('DocumentChecklist', { loadId });
+  };
+
+  const handleCheckpointsQuickAccess = () => {
+    navigation.navigate('CheckpointTimeline', { loadId });
+  };
+
+  const handleContainerQuickAccess = () => {
+    navigation.navigate('ContainerDetails', { loadId });
+  };
+
   return (
     <View style={styles.container} testID="shipper-tracking-screen">
       <View style={styles.mapContainer} testID="tracking-map-container">
@@ -171,6 +187,34 @@ export default function TrackingScreen({ route }: Props) {
         </Text>
       )}
 
+      {/* Task F.1 — shipment-details quick access row. */}
+      <View style={styles.shipmentDetailsRow}>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleDocumentsQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-documents-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Documents</Text>
+        </Pressable>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleCheckpointsQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-checkpoints-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Checkpoints</Text>
+        </Pressable>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleContainerQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-container-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Container</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.loadIdText} testID="tracking-load-id">
         Load ID: {loadId}
       </Text>
@@ -215,6 +259,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
+  shipmentDetailsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  shipmentDetailsButton: {
+    flex: 1,
+    backgroundColor: '#F4F6F9',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  shipmentDetailsButtonLabel: { color: '#3A4048', fontSize: 13, fontWeight: '600' },
   loadIdText: {
     fontSize: 11,
     color: '#9AA1AC',

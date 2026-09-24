@@ -8,6 +8,11 @@ import LoadPostingScreen from '../screens/shipper/LoadPostingScreen';
 import MatchResultsScreen from '../screens/shipper/MatchResultsScreen';
 import FareQuoteScreen from '../screens/shipper/FareQuoteScreen';
 import TrackingScreen from '../screens/shipper/TrackingScreen';
+import DocumentChecklistScreen from '../screens/shared/DocumentChecklistScreen';
+import CheckpointTimelineScreen from '../screens/shared/CheckpointTimelineScreen';
+import ContainerDetailsScreen from '../screens/shared/ContainerDetailsScreen';
+import NotificationInboxScreen from '../screens/shared/NotificationInboxScreen';
+import NotificationPreferencesScreen from '../screens/shared/NotificationPreferencesScreen';
 
 /**
  * ShipperStack — real implementation (task D.1, extended by D.2).
@@ -50,6 +55,35 @@ export default function ShipperStack() {
         name="Tracking"
         component={TrackingScreen}
         options={{ headerShown: true, title: 'Track shipment' }}
+      />
+      {/* Task F.1 — shared screens, identical registration on both role
+          stacks (see TransporterStack.tsx). */}
+      <Stack.Screen
+        name="DocumentChecklist"
+        component={DocumentChecklistScreen}
+        options={{ headerShown: true, title: 'Documents' }}
+      />
+      <Stack.Screen
+        name="CheckpointTimeline"
+        component={CheckpointTimelineScreen}
+        options={{ headerShown: true, title: 'Checkpoint status' }}
+      />
+      <Stack.Screen
+        name="ContainerDetails"
+        component={ContainerDetailsScreen}
+        options={{ headerShown: true, title: 'Container details' }}
+      />
+      {/* Task F.2 — shared screens, identical registration on both role
+          stacks (see TransporterStack.tsx). */}
+      <Stack.Screen
+        name="NotificationInbox"
+        component={NotificationInboxScreen}
+        options={{ headerShown: true, title: 'Notifications' }}
+      />
+      <Stack.Screen
+        name="NotificationPreferences"
+        component={NotificationPreferencesScreen}
+        options={{ headerShown: true, title: 'Notification preferences' }}
       />
     </Stack.Navigator>
   );

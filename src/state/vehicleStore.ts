@@ -9,7 +9,24 @@ import type { DocumentType } from '../validation/documentUploadSchema';
  * the implementation.
  */
 
-export type DocumentStatus = 'not_uploaded' | 'pending' | 'uploaded' | 'verified' | 'rejected';
+/**
+ * Extended in task F.1 to add `'cleared'`: the source doc's per-shipment
+ * document progression (Module 4.5a) is Pending -> Uploaded -> Verified ->
+ * Cleared, one terminal state beyond what C.2's vehicle-document flow
+ * needed. Kept as a single shared type (not forked into a second,
+ * shipment-only enum) specifically so `DocumentStatusBadge` stays the one
+ * reused-not-duplicated status badge across both C.2 and F.1, per F.1's
+ * explicit "reuse, don't rebuild" requirement. `'cleared'` is additive and
+ * doesn't change any existing vehicle-document call site, which never
+ * produces it.
+ */
+export type DocumentStatus =
+  | 'not_uploaded'
+  | 'pending'
+  | 'uploaded'
+  | 'verified'
+  | 'cleared'
+  | 'rejected';
 
 export interface VehicleDocumentState {
   docType: DocumentType;

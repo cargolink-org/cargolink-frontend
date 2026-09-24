@@ -56,7 +56,7 @@ function toLatLng(point: { lat: number; lng: number }): LatLng {
  * integration gap rather than guessed at, per the task's own allowance
  * for TBD transporter-side data sourcing.
  */
-export default function TrackingScreen({ route }: Props) {
+export default function TrackingScreen({ route, navigation }: Props) {
   const { loadId, vehicleId } = route.params;
 
   const currentPosition = useTrackingPosition();
@@ -155,11 +155,18 @@ export default function TrackingScreen({ route }: Props) {
   }, [connectionState, lastUpdatedAt]);
 
   const handleCheckpointQuickAccess = () => {
-    // Navigation entry point only, per the task's explicit scope — the
-    // real CheckpointTimelineScreen destination is Cluster F's build, not
-    // this task's. A placeholder confirms the affordance is reachable and
-    // wired without navigating to a route that doesn't exist yet.
-    Alert.alert('Checkpoint updates', 'Checkpoint status updates ship in Cluster F.');
+    // Wired to the real destination as of Task F.1 — previously a
+    // placeholder Alert ("Checkpoint status updates ship in Cluster F"),
+    // since CheckpointTimelineScreen didn't exist yet at Task E.2.
+    navigation.navigate('CheckpointTimeline', { loadId });
+  };
+
+  const handleDocumentsQuickAccess = () => {
+    navigation.navigate('DocumentChecklist', { loadId });
+  };
+
+  const handleContainerQuickAccess = () => {
+    navigation.navigate('ContainerDetails', { loadId });
   };
 
   // Task E.2 — "Start Trip" shows the permission primer first (UI
@@ -294,6 +301,27 @@ export default function TrackingScreen({ route }: Props) {
         <Text style={styles.checkpointButtonLabel}>Update checkpoint status</Text>
       </Pressable>
 
+      {/* Task F.1 — shipment-details quick access row, mirrored on the
+          shipper variant of this screen. */}
+      <View style={styles.shipmentDetailsRow}>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleDocumentsQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-documents-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Documents</Text>
+        </Pressable>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleContainerQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-container-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Container details</Text>
+        </Pressable>
+      </View>
+
       <Text style={styles.loadIdText} testID="tracking-load-id">
         Load ID: {loadId}
       </Text>
@@ -372,6 +400,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkpointButtonLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  shipmentDetailsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  shipmentDetailsButton: {
+    flex: 1,
+    backgroundColor: '#F4F6F9',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  shipmentDetailsButtonLabel: { color: '#3A4048', fontSize: 13, fontWeight: '600' },
   loadIdText: {
     fontSize: 11,
     color: '#9AA1AC',

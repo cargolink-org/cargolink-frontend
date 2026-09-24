@@ -43,7 +43,7 @@ const route = {
   key: 'Tracking',
   name: 'Tracking',
 } as any;
-const navigation = {} as any;
+const navigation = { navigate: jest.fn() } as any;
 
 function resetTrackingStore() {
   useTrackingStore.setState({ currentPosition: null, connectionState: 'connecting', lastUpdatedAt: null });
@@ -132,11 +132,24 @@ describe('TrackingScreen (transporter variant)', () => {
     expect(screen.getByTestId('tracking-status-text')).toHaveTextContent(/Last seen \d+ min ago/);
   });
 
-  it('provides a checkpoint-update quick-access affordance (navigation entry point only)', () => {
+  it('navigates to the checkpoint timeline when the checkpoint quick-access button is pressed', () => {
+    // Task F.1 — previously a placeholder Alert; now wired to the real
+    // CheckpointTimelineScreen destination.
     render(<TrackingScreen route={route} navigation={navigation} />);
 
-    const button = screen.getByTestId('tracking-checkpoint-quick-access');
-    expect(button).toBeTruthy();
+    fireEvent.press(screen.getByTestId('tracking-checkpoint-quick-access'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('CheckpointTimeline', { loadId: 'load-1' });
+  });
+
+  it('navigates to the document checklist and container details screens from their quick-access buttons', () => {
+    render(<TrackingScreen route={route} navigation={navigation} />);
+
+    fireEvent.press(screen.getByTestId('tracking-documents-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('DocumentChecklist', { loadId: 'load-1' });
+
+    fireEvent.press(screen.getByTestId('tracking-container-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('ContainerDetails', { loadId: 'load-1' });
   });
 
   it('unsubscribes from both listeners and leaves the room on unmount, with no leaks across remounts', async () => {

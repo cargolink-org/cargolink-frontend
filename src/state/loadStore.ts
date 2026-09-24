@@ -8,12 +8,20 @@
 //   - PURE UI STATE:      `draft` — the in-progress load-posting form.
 //   - SERVER-DERIVED:     `matches`, `selectedVehicleId`, `quote`,
 //                         `acceptedMatch`, `documents`, `checkpoints`,
-//                         `container` — all populated from future API
-//                         responses (Cluster D/F), never invented here.
+//                         `container` — all populated from API responses
+//                         (Cluster D/F), never invented here.
 //
-// `documents` / `checkpoints` / `container` are empty/typed placeholders
-// for Cluster F — this task only needs their shape to exist so later
-// clusters don't require a breaking store-shape change.
+// `documents` / `checkpoints` / `container` (Task F.1) are `Record<loadId,
+// ...>` maps rather than single values, per this task's explicit state-
+// shape instruction — both shipper and transporter can view these screens
+// for the same load, and a single unkeyed value would let one load's data
+// leak into another's view if the app ever navigates between loads within
+// one session (e.g. a transporter with more than one active haul). Each
+// map has a matching `*Loading`/`*Error` map, keyed the same way, mirroring
+// the `isLoadingMatches`/`matchesError` pattern already established below
+// for `matches` — kept as sibling maps rather than nesting loading/error
+// inside the record's value type so `setXLoading`/`setXError` don't need
+// to read-modify-write the data map itself.
 
 import { create } from 'zustand';
 import type {
@@ -21,9 +29,9 @@ import type {
   MatchResult,
   FareQuote,
   AcceptedMatch,
-  ShipmentDocumentsState,
-  CheckpointsState,
-  ContainerState,
+  ShipmentDocument,
+  CheckpointUpdate,
+  ContainerDetails,
 } from './types';
 
 interface LoadState {
@@ -47,9 +55,19 @@ interface LoadState {
   selectedVehicleId: string | null;
   quote: FareQuote | null;
   acceptedMatch: AcceptedMatch | null;
-  documents: ShipmentDocumentsState;
-  checkpoints: CheckpointsState;
-  container: ContainerState;
+
+  // --- Task F.1 — keyed by load_id (see top-of-file comment) ---
+  documents: Record<string, ShipmentDocument[]>;
+  documentsLoading: Record<string, boolean>;
+  documentsError: Record<string, string | null>;
+  checkpoints: Record<string, CheckpointUpdate[]>;
+  checkpointsLoading: Record<string, boolean>;
+  checkpointsError: Record<string, string | null>;
+  /** `undefined` = not yet fetched; `null` = fetched, no container record
+   * (not applicable to this load); a value = the fetched record. */
+  container: Record<string, ContainerDetails | null>;
+  containerLoading: Record<string, boolean>;
+  containerError: Record<string, string | null>;
 
   // --- Async status (scaffolded now to avoid a breaking shape change
   //     when Cluster B/D wire in real API calls) ---
@@ -83,6 +101,24 @@ interface LoadState {
   setIsAccepting: (accepting: boolean) => void;
   setPostError: (error: string | null) => void;
   setIsPosting: (posting: boolean) => void;
+
+  // --- Task F.1 actions ---
+  setDocuments: (loadId: string, documents: ShipmentDocument[]) => void;
+  setDocumentsLoading: (loadId: string, loading: boolean) => void;
+  setDocumentsError: (loadId: string, error: string | null) => void;
+  setCheckpoints: (loadId: string, checkpoints: CheckpointUpdate[]) => void;
+  setCheckpointsLoading: (loadId: string, loading: boolean) => void;
+  setCheckpointsError: (loadId: string, error: string | null) => void;
+  /** Appends one confirmed checkpoint update (the server's response to a
+   * successful POST) rather than replacing the whole list — used instead
+   * of a full re-fetch so a transporter's own just-posted update appears
+   * immediately without a round-trip, while still only reflecting
+   * server-confirmed data (no optimistic pre-confirmation entry is ever
+   * added — task F.1's explicit "no optimistic updates" requirement). */
+  appendCheckpoint: (loadId: string, update: CheckpointUpdate) => void;
+  setContainer: (loadId: string, container: ContainerDetails | null) => void;
+  setContainerLoading: (loadId: string, loading: boolean) => void;
+  setContainerError: (loadId: string, error: string | null) => void;
 }
 
 const initialDraft: LoadDraft = {};
@@ -96,8 +132,14 @@ export const useLoadStore = create<LoadState>()((set) => ({
   quote: null,
   acceptedMatch: null,
   documents: {},
+  documentsLoading: {},
+  documentsError: {},
   checkpoints: {},
+  checkpointsLoading: {},
+  checkpointsError: {},
   container: {},
+  containerLoading: {},
+  containerError: {},
 
   isLoadingMatches: false,
   matchesError: null,
@@ -152,6 +194,61 @@ export const useLoadStore = create<LoadState>()((set) => ({
 
   setPostError: (postError) => set({ postError }),
   setIsPosting: (isPosting) => set({ isPosting }),
+
+  // --- Task F.1 actions — each keyed map is updated via a shallow spread
+  // keyed by loadId, matching the Record<loadId, ...> shape above. ---
+  setDocuments: (loadId, documents) =>
+    set((s) => ({
+      documents: { ...s.documents, [loadId]: documents },
+      documentsLoading: { ...s.documentsLoading, [loadId]: false },
+      documentsError: { ...s.documentsError, [loadId]: null },
+    })),
+
+  setDocumentsLoading: (loadId, loading) =>
+    set((s) => ({ documentsLoading: { ...s.documentsLoading, [loadId]: loading } })),
+
+  setDocumentsError: (loadId, error) =>
+    set((s) => ({
+      documentsError: { ...s.documentsError, [loadId]: error },
+      documentsLoading: { ...s.documentsLoading, [loadId]: false },
+    })),
+
+  setCheckpoints: (loadId, checkpoints) =>
+    set((s) => ({
+      checkpoints: { ...s.checkpoints, [loadId]: checkpoints },
+      checkpointsLoading: { ...s.checkpointsLoading, [loadId]: false },
+      checkpointsError: { ...s.checkpointsError, [loadId]: null },
+    })),
+
+  setCheckpointsLoading: (loadId, loading) =>
+    set((s) => ({ checkpointsLoading: { ...s.checkpointsLoading, [loadId]: loading } })),
+
+  setCheckpointsError: (loadId, error) =>
+    set((s) => ({
+      checkpointsError: { ...s.checkpointsError, [loadId]: error },
+      checkpointsLoading: { ...s.checkpointsLoading, [loadId]: false },
+    })),
+
+  appendCheckpoint: (loadId, update) =>
+    set((s) => ({
+      checkpoints: { ...s.checkpoints, [loadId]: [...(s.checkpoints[loadId] ?? []), update] },
+    })),
+
+  setContainer: (loadId, container) =>
+    set((s) => ({
+      container: { ...s.container, [loadId]: container },
+      containerLoading: { ...s.containerLoading, [loadId]: false },
+      containerError: { ...s.containerError, [loadId]: null },
+    })),
+
+  setContainerLoading: (loadId, loading) =>
+    set((s) => ({ containerLoading: { ...s.containerLoading, [loadId]: loading } })),
+
+  setContainerError: (loadId, error) =>
+    set((s) => ({
+      containerError: { ...s.containerError, [loadId]: error },
+      containerLoading: { ...s.containerLoading, [loadId]: false },
+    })),
 }));
 
 // Fine-grained selector hooks.
@@ -162,3 +259,26 @@ export const useSelectedVehicleId = () => useLoadStore((s) => s.selectedVehicleI
 export const useQuote = () => useLoadStore((s) => s.quote);
 export const useAcceptedMatch = () => useLoadStore((s) => s.acceptedMatch);
 export const usePostError = () => useLoadStore((s) => s.postError);
+
+// --- Task F.1 fine-grained selector hooks — each takes the loadId so a
+// screen only re-renders when its own load's slice changes, not on every
+// other load's update (relevant once a transporter has more than one
+// active haul in-session). ---
+export const useShipmentDocuments = (loadId: string) =>
+  useLoadStore((s) => s.documents[loadId]);
+export const useShipmentDocumentsLoading = (loadId: string) =>
+  useLoadStore((s) => s.documentsLoading[loadId] ?? false);
+export const useShipmentDocumentsError = (loadId: string) =>
+  useLoadStore((s) => s.documentsError[loadId] ?? null);
+
+export const useCheckpoints = (loadId: string) => useLoadStore((s) => s.checkpoints[loadId]);
+export const useCheckpointsLoading = (loadId: string) =>
+  useLoadStore((s) => s.checkpointsLoading[loadId] ?? false);
+export const useCheckpointsError = (loadId: string) =>
+  useLoadStore((s) => s.checkpointsError[loadId] ?? null);
+
+export const useContainer = (loadId: string) => useLoadStore((s) => s.container[loadId]);
+export const useContainerLoading = (loadId: string) =>
+  useLoadStore((s) => s.containerLoading[loadId] ?? false);
+export const useContainerError = (loadId: string) =>
+  useLoadStore((s) => s.containerError[loadId] ?? null);

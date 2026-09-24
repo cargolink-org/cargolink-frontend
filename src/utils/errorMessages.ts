@@ -10,6 +10,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   OTP_INVALID: "That OTP doesn't look right. Please try again.",
   OTP_MAX_ATTEMPTS: 'Too many attempts. Please request a new OTP.',
   RATE_LIMITED: 'You are requesting OTPs too often. Please wait a moment.',
+  // Task F.1 — role-mismatch shouldn't be reachable given the UI's
+  // transporter-only gating (CheckpointTimelineScreen never renders the
+  // "Update Status" action for a shipper session), but is handled
+  // gracefully per the task spec if the server rejects it anyway.
+  CHECKPOINT_ROLE_FORBIDDEN: 'Only the assigned transporter can update checkpoint status.',
 };
 
 export function getErrorMessage(error: unknown): string {

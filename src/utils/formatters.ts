@@ -54,3 +54,33 @@ export function getLastSeenLabel(lastUpdatedAt: string | null, now: number = Dat
   if (diffMinutes === 1) return 'Last seen 1 min ago';
   return `Last seen ${diffMinutes} min ago`;
 }
+
+/**
+ * Formats a checkpoint update's ISO8601 timestamp for display on
+ * `CheckpointTimelineScreen` (Task F.1) — e.g. "Sep 1, 2026, 8:00 AM".
+ * Returns `null` (not a placeholder string) for a missing/invalid
+ * timestamp so callers can decide whether to render a timestamp line at
+ * all, consistent with `Timeline`'s optional `timestamp` prop.
+ */
+export function formatCheckpointTimestamp(timestamp: string | null | undefined): string | null {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Formats a notification's `sent_at` ISO8601 timestamp for display on
+ * `NotificationInboxScreen` (Task F.2). Same underlying format as
+ * `formatCheckpointTimestamp` (both just render a generic ISO8601 string
+ * the same human-readable way) — reused rather than duplicated, exposed
+ * under a domain-appropriate name at each call site instead of leaving
+ * F.2 code calling a function literally named "checkpoint".
+ */
+export const formatNotificationTimestamp = formatCheckpointTimestamp;

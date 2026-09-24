@@ -4,6 +4,7 @@ import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { useVehicleStore } from '../../state/vehicleStore';
 import type { TransporterStackParamList } from '../../navigation/types';
+import { NotificationBadge } from '../../components/NotificationBadge';
 
 /**
  * A real "Incoming Loads" screen (where a transporter would normally tap
@@ -42,6 +43,17 @@ export function TransporterHomeScreen(): React.JSX.Element {
       >
         <Text style={styles.startTripLabel}>Start trip (dev)</Text>
       </Pressable>
+      {/* Task F.2 — see ShipperHomeScreen.tsx's matching comment on why
+          this lives here rather than on a tab bar. */}
+      <Pressable
+        style={styles.notificationsButton}
+        onPress={() => navigation.navigate('NotificationInbox')}
+        accessibilityRole="button"
+        testID="home-notifications-button"
+      >
+        <Text style={styles.notificationsButtonLabel}>Notifications</Text>
+        <NotificationBadge />
+      </Pressable>
     </View>
   );
 }
@@ -66,6 +78,20 @@ const styles = StyleSheet.create({
   },
   startTripLabel: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  notificationsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F4F6F9',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  notificationsButtonLabel: {
+    color: '#3A4048',
     fontSize: 14,
     fontWeight: '600',
   },

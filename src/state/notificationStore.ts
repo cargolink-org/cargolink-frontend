@@ -10,7 +10,7 @@
 // `items` is ever spread into a fixed-size array).
 
 import { create } from 'zustand';
-import type { Notification } from './types';
+import type { Notification, NotificationPreferences } from './types';
 
 interface NotificationState {
   unreadCount: number;
@@ -20,6 +20,29 @@ interface NotificationState {
   markRead: (id: string) => void;
   setItems: (items: Notification[]) => void;
   clearAll: () => void;
+
+  // --- Task F.2 — fetch status for `items`, same parity as
+  // `isLoadingPreferences`/`preferencesError` below, so NotificationInboxScreen
+  // can show its own loading/retry-error state consistently with F.1's
+  // established screen pattern. ---
+  isLoadingItems: boolean;
+  itemsError: string | null;
+  setItemsLoading: (loading: boolean) => void;
+  setItemsError: (error: string | null) => void;
+
+  // --- Task F.2 — preferences state. Kept in the same store as the
+  // inbox items (rather than a new store) since both are simple,
+  // low-traffic, closely-related notification concerns owned by one
+  // screen pair. `preferences` is `null` until the first successful
+  // fetch; `undefined` is never used here (unlike loadStore's F.1
+  // per-loadId maps) since there is exactly one preferences object per
+  // signed-in user, not one per keyed entity. ---
+  preferences: NotificationPreferences | null;
+  isLoadingPreferences: boolean;
+  preferencesError: string | null;
+  setPreferences: (preferences: NotificationPreferences) => void;
+  setPreferencesLoading: (loading: boolean) => void;
+  setPreferencesError: (error: string | null) => void;
 }
 
 const deriveUnread = (items: Notification[]) => items.filter((n) => !n.read).length;
@@ -40,11 +63,32 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       return { items, unreadCount: deriveUnread(items) };
     }),
 
-  setItems: (items) => set({ items, unreadCount: deriveUnread(items) }),
+  setItems: (items) => set({ items, unreadCount: deriveUnread(items), isLoadingItems: false, itemsError: null }),
 
   clearAll: () => set({ items: [], unreadCount: 0 }),
+
+  isLoadingItems: false,
+  itemsError: null,
+  setItemsLoading: (isLoadingItems) => set({ isLoadingItems }),
+  setItemsError: (itemsError) => set({ itemsError, isLoadingItems: false }),
+
+  // --- Task F.2 — preferences actions ---
+  preferences: null,
+  isLoadingPreferences: false,
+  preferencesError: null,
+  setPreferences: (preferences) =>
+    set({ preferences, isLoadingPreferences: false, preferencesError: null }),
+  setPreferencesLoading: (isLoadingPreferences) => set({ isLoadingPreferences }),
+  setPreferencesError: (preferencesError) =>
+    set({ preferencesError, isLoadingPreferences: false }),
 }));
 
 // Fine-grained selector hooks.
 export const useUnreadCount = () => useNotificationStore((s) => s.unreadCount);
 export const useNotificationItems = () => useNotificationStore((s) => s.items);
+export const useIsLoadingItems = () => useNotificationStore((s) => s.isLoadingItems);
+export const useItemsError = () => useNotificationStore((s) => s.itemsError);
+export const useNotificationPreferences = () => useNotificationStore((s) => s.preferences);
+export const useIsLoadingPreferences = () =>
+  useNotificationStore((s) => s.isLoadingPreferences);
+export const usePreferencesError = () => useNotificationStore((s) => s.preferencesError);

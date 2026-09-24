@@ -26,6 +26,7 @@
     "expo-location": "~17.0.1",
     "expo-secure-store": "~13.0.2",
     "expo-task-manager": "~11.8.2",
+    "mapbox-gl": "^2.15.0",
     "react": "18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.51.5",

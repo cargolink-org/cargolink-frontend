@@ -11,6 +11,7 @@ import CheckpointTimelineScreen from '../screens/shared/CheckpointTimelineScreen
 import ContainerDetailsScreen from '../screens/shared/ContainerDetailsScreen';
 import NotificationInboxScreen from '../screens/shared/NotificationInboxScreen';
 import NotificationPreferencesScreen from '../screens/shared/NotificationPreferencesScreen';
+import RatingScreen from '../screens/transporter/RatingScreen';
 
 /**
  * TransporterStack — built out for real as part of Task E.1.
@@ -85,6 +86,14 @@ export default function TransporterStack() {
         name="NotificationPreferences"
         component={NotificationPreferencesScreen}
         options={{ headerShown: true, title: 'Notification preferences' }}
+      />
+      {/* Task G.1 — role-specific (not shared with ShipperStack): the
+          transporter rates the shipper here, the shipper rates the
+          transporter on the symmetrical route above. */}
+      <Stack.Screen
+        name="Rating"
+        component={RatingScreen}
+        options={{ headerShown: true, title: 'Rate this trip' }}
       />
     </Stack.Navigator>
   );

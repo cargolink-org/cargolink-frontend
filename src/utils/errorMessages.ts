@@ -15,6 +15,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   // "Update Status" action for a shipper session), but is handled
   // gracefully per the task spec if the server rejects it anyway.
   CHECKPOINT_ROLE_FORBIDDEN: 'Only the assigned transporter can update checkpoint status.',
+  // Task G.1 — shouldn't be reachable given RatingForm's mount-time
+  // read-only-vs-submittable check, but handled gracefully per the task
+  // spec if the server rejects a submission as a duplicate anyway.
+  RATING_DUPLICATE: 'You have already rated this trip.',
 };
 
 export function getErrorMessage(error: unknown): string {

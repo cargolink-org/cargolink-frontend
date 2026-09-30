@@ -152,6 +152,18 @@ describe('TrackingScreen (transporter variant)', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('ContainerDetails', { loadId: 'load-1' });
   });
 
+  it('navigates to Rating from its quick-access button, using loadId as the placeholder rateeId', () => {
+    // Task G.1 — see RatingScreen.tsx's (transporter variant) top-of-file
+    // comment: no shipper-identifying value exists anywhere in the
+    // transporter's frontend state yet, so `loadId` is used as a
+    // placeholder `rateeId` pending a real backend/contract field.
+    render(<TrackingScreen route={route} navigation={navigation} />);
+
+    fireEvent.press(screen.getByTestId('tracking-rate-quick-access'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('Rating', { loadId: 'load-1', rateeId: 'load-1' });
+  });
+
   it('unsubscribes from both listeners and leaves the room on unmount, with no leaks across remounts', async () => {
     const { unmount } = render(<TrackingScreen route={route} navigation={navigation} />);
     await waitFor(() => expect(mockJoinRoom).toHaveBeenCalledTimes(1));

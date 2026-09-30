@@ -69,6 +69,20 @@ interface LoadState {
   containerLoading: Record<string, boolean>;
   containerError: Record<string, string | null>;
 
+  // --- Task G.1 — keyed by load_id (see top-of-file comment). A single
+  // lightweight map rather than a dedicated ratingStore, per the task's
+  // own explicit allowance ("a minimal new ratingStore if cleaner — use
+  // judgment") — RatingScreen is the only consumer and the value is one
+  // small object per load, not worth its own store. No loading/error
+  // sibling maps here (unlike documents/checkpoints/container above):
+  // there is no GET to fetch a rating back in this task's scope, only a
+  // POST whose in-flight/error state is screen-local (`isSubmitting`/
+  // `submitError`), matching the task's "keep it consistent... but use
+  // judgment" guidance. `undefined` = not known to be rated yet this
+  // session (RatingForm renders submittable mode); a value = a rating was
+  // successfully submitted this session (RatingForm renders read-only).
+  ratingSubmitted: Record<string, { score: number; comment?: string }>;
+
   // --- Async status (scaffolded now to avoid a breaking shape change
   //     when Cluster B/D wire in real API calls) ---
   isLoadingMatches: boolean;
@@ -119,6 +133,14 @@ interface LoadState {
   setContainer: (loadId: string, container: ContainerDetails | null) => void;
   setContainerLoading: (loadId: string, loading: boolean) => void;
   setContainerError: (loadId: string, error: string | null) => void;
+
+  // --- Task G.1 action ---
+  /** Marks `loadId` as rated this session with `{ score, comment }` —
+   * called only after a server-confirmed successful `POST /ratings`
+   * (see RatingScreen.tsx), matching the project-wide "no optimistic
+   * updates" convention (never called speculatively before the request
+   * resolves). */
+  setRatingSubmitted: (loadId: string, rating: { score: number; comment?: string }) => void;
 }
 
 const initialDraft: LoadDraft = {};
@@ -140,6 +162,7 @@ export const useLoadStore = create<LoadState>()((set) => ({
   container: {},
   containerLoading: {},
   containerError: {},
+  ratingSubmitted: {},
 
   isLoadingMatches: false,
   matchesError: null,
@@ -249,6 +272,10 @@ export const useLoadStore = create<LoadState>()((set) => ({
       containerError: { ...s.containerError, [loadId]: error },
       containerLoading: { ...s.containerLoading, [loadId]: false },
     })),
+
+  // --- Task G.1 action ---
+  setRatingSubmitted: (loadId, rating) =>
+    set((s) => ({ ratingSubmitted: { ...s.ratingSubmitted, [loadId]: rating } })),
 }));
 
 // Fine-grained selector hooks.
@@ -282,3 +309,7 @@ export const useContainerLoading = (loadId: string) =>
   useLoadStore((s) => s.containerLoading[loadId] ?? false);
 export const useContainerError = (loadId: string) =>
   useLoadStore((s) => s.containerError[loadId] ?? null);
+
+// --- Task G.1 fine-grained selector hook ---
+export const useRatingSubmitted = (loadId: string) =>
+  useLoadStore((s) => s.ratingSubmitted[loadId]);

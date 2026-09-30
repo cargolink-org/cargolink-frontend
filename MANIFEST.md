@@ -1,144 +1,72 @@
-# CargoLink Frontend — Cluster F Delivery Manifest (Tasks F.1 + F.2)
+# CargoLink Frontend — Task G.1 Delivery Manifest
 
-**Cluster F (Import-Export UI & Notifications) — Task F.1: Document
-Checklist UI, Checkpoint Timeline UI, Container Screen. Task F.2:
-Notification Inbox / Preferences Screen.**
+**Task:** G.1 — Post-Trip Rating UI
+**Cluster:** G (Ratings & Admin Dashboard)
+**Baseline verified against:** fresh clone of `cargolink-org/cargolink-frontend`, Cluster F (F.1 + F.2) confirmed applied — 322/322 tests passing, 44 suites, `tsc --noEmit` clean, no stale files found this session.
+**Final state after this task:** 343/343 tests passing, 47 suites, `tsc --noEmit` clean, zero new ESLint violation categories.
 
-This delivery was built and verified directly against a fresh clone of
-`https://github.com/cargolink-org/cargolink-frontend` (branch: `main`).
-**On cloning, the real repo only had Task E.2 applied — F.1 had not been
-applied yet**, despite having been fully built and delivered as its own
-zip in a prior session. Rather than build F.2 on a stale baseline that
-would conflict with F.1's own eventual application on several shared
-files (`navigation/types.ts`, both `*Stack.tsx` files,
-`utils/errorMessages.ts`, `utils/formatters.ts`), F.1 was reconstructed
-in full in this session, verified against the same 303/38 passing state
-it originally reported, and F.2 was then built on top. **This zip
-supersedes any standalone F.1-only zip — apply this one instead, not
-both.**
+## Application instructions
 
-No push credentials were available for this repo in this session, so
-integration is via this zip — the same delivery mechanism used for every
-task so far.
+Established pattern: delete → copy → `npm install` → `expo prebuild` → verify.
 
-**Baseline before this session**: after deleting 3 stale leftover test
-files (same housekeeping gap noted, but not yet applied, in E.1's and
-E.2's own manifests), 269/269 tests passing across 32 suites, `tsc
---noEmit` clean.
+1. Copy every file below into the matching path under `frontend/` in the real repo, overwriting the 9 modified files and adding the 9 new files.
+2. `npm install` (no new dependencies were added — this is a precaution, not a requirement).
+3. `npx tsc --noEmit` — should be clean.
+4. `npx jest` — should show 47 suites / 343 tests passing.
+5. `npx eslint . --ext .ts,.tsx` — should show only the pre-existing `react-native/no-color-literals` and `@typescript-eslint/no-explicit-any` categories (counts will rise slightly from this task's new styled components and `as any` test mocks — no new categories).
 
-**After this delivery (F.1 + F.2 combined)**: **322/322 tests passing
-across 44 suites**, `tsc --noEmit` clean. See `README.md` (included in
-this zip, replaces the current one) for full delivery notes per task,
-including F.2's notification-endpoint contract gap — the single largest
-open item flagged across Cluster F so far.
+## New files (9)
 
----
+| File | Purpose |
+|---|---|
+| `src/validation/ratingSchema.ts` | Zod schema: score 1–5 required, comment ≤500 chars optional. Defense-in-depth (UI already constrains both). |
+| `src/api/ratings.ts` | `submitRating()` — `POST /ratings`. Mirrors `api/checkpoints.ts`'s single-function/inline-`MOCK_MODE`-branch shape. Exports `MOCK_DUPLICATE_RATING_LOAD_ID` sentinel for exercising the duplicate-rejection path in mock mode/tests. |
+| `src/components/StarInput.tsx` | Reusable 1–5 star control, prop-driven (`value`, `onChange`, `readOnly`). Screen-reader announces "`N` out of 5 stars, selected". |
+| `src/components/RatingForm.tsx` | **Not in the task spec's own file list** — added anyway, mirroring the `ProfileForm.tsx` (Task C.1) precedent: the shared star/comment/submit/read-only logic used by both role screens, so it isn't duplicated across them. See its top-of-file comment. |
+| `src/screens/shipper/RatingScreen.tsx` | Thin wrapper: route params, `loadStore`, the `submitRating` call. Shipper rates the transporter. |
+| `src/screens/transporter/RatingScreen.tsx` | Same shape, transporter rates the shipper. |
+| `src/components/StarInput.test.tsx` | 6 tests: tap-sets-value, correct-value-per-star, accessibility announcements (selected/unselected), read-only non-interactivity, `accessibilityState.selected` per star. |
+| `src/screens/shipper/RatingScreen.test.tsx` | 7 tests: submittable-mode render, 1–5 validation block, duplicate-guard read-only render, successful submit (payload/store/navigation), submit-failure data preservation, server-side duplicate-rejection message, Skip. |
+| `src/screens/transporter/RatingScreen.test.tsx` | Same 7 cases, transporter variant. |
 
-## Step 1 — Delete these files first
+## Modified files (9)
 
-```
-rm src/screens/shipper/ProfileForm.test.tsx
-rm src/screens/transporter/ProfileForm.test.tsx
-rm src/validation/ProfileScreen.test.tsx
-```
+| File | Change |
+|---|---|
+| `src/state/loadStore.ts` | Added `ratingSubmitted: Record<loadId, {score, comment?}>` map, `setRatingSubmitted` action, `useRatingSubmitted(loadId)` selector hook. No loading/error sibling maps (unlike the F.1 document/checkpoint/container maps) — there's no GET to fetch a rating back in this task's scope, only a POST whose in-flight/error state is screen-local. |
+| `src/utils/errorMessages.ts` | Added `RATING_DUPLICATE: 'You have already rated this trip.'` to the `ERROR_MESSAGES` dictionary. |
+| `src/navigation/types.ts` | Added `Rating: { loadId: string; rateeId: string }` to both `ShipperStackParamList` and `TransporterStackParamList`. |
+| `src/navigation/ShipperStack.tsx` | Registered `RatingScreen` (shipper) as the `Rating` route. |
+| `src/navigation/TransporterStack.tsx` | Registered `RatingScreen` (transporter) as the `Rating` route. |
+| `src/screens/shipper/TrackingScreen.tsx` | **Not in the task spec's own "Files to Modify" list** — added a "Rate" quick-access button to the existing shipment-details row, navigating to `Rating` with `rateeId: vehicleId`. See rationale below. |
+| `src/screens/transporter/TrackingScreen.tsx` | Same addition, `rateeId: loadId` (placeholder — see below). |
+| `src/screens/shipper/TrackingScreen.test.tsx` | Extended the existing quick-access test with the new button. |
+| `src/screens/transporter/TrackingScreen.test.tsx` | New test for the Rate button's navigation call. |
 
-(If already deleted, this step is a no-op.)
+## Deliberate scope additions beyond the task spec's literal file list
 
-## Step 2 — Copy these files in (overwrite existing)
+Two files weren't in G.1's own "Files to Create"/"Files to Modify" lists but were added anyway, each documented inline at the point of the decision:
 
-All paths are relative to `frontend/`.
+1. **`src/components/RatingForm.tsx`** — the task's own architecture requirements ask for materially the same logic (read-only-vs-submittable render, validation, star input, comment field) in two separate screen files. Duplicating it across both would contradict the project's standing "shared logic over duplicated" principle and the `ProfileForm.tsx` precedent it's modeled on. The two `RatingScreen.tsx` files are thin wrappers around it.
+2. **"Rate" quick-access buttons on both `TrackingScreen.tsx` files** — G.1's own "Navigation dependencies" section names TrackingScreen as the typical entry point, and every other Cluster F/G screen so far has been reachable from a real button rather than left registered-but-orphaned (same reasoning F.1 used for its Documents/Checkpoints/Container buttons). Without this, `RatingScreen` would be registered in both stacks but unreachable from anywhere in the running app.
 
-**New files:**
-```
-src/api/checkpoints.ts
-src/api/notifications.ts
-src/components/NotificationBadge.tsx
-src/components/NotificationBadge.test.tsx
-src/components/Timeline.tsx
-src/components/Timeline.test.tsx
-src/screens/shared/CheckpointTimelineScreen.tsx
-src/screens/shared/CheckpointTimelineScreen.test.tsx
-src/screens/shared/ContainerDetailsScreen.tsx
-src/screens/shared/ContainerDetailsScreen.test.tsx
-src/screens/shared/DocumentChecklistScreen.tsx
-src/screens/shared/DocumentChecklistScreen.test.tsx
-src/screens/shared/NotificationInboxScreen.tsx
-src/screens/shared/NotificationInboxScreen.test.tsx
-src/screens/shared/NotificationPreferencesScreen.tsx
-src/screens/shared/NotificationPreferencesScreen.test.tsx
-src/screens/shipper/ShipperHomeScreen.test.tsx
-src/screens/transporter/TransporterHomeScreen.test.tsx
-src/services/notifications.ts
-src/services/notifications.test.ts
-src/utils/checkpointTimeline.ts
-src/utils/checkpointTimeline.test.ts
-src/utils/shipmentDocuments.ts
-src/utils/shipmentDocuments.test.ts
-src/validation/checkpointUpdateSchema.ts
-```
+## Open contract items flagged for Dinesh (same category as F.1/F.2's flagged gaps)
 
-**Modified files (overwrite in place):**
-```
-README.md
-src/api/documents.ts
-src/components/DocumentStatusBadge.tsx
-src/navigation/ShipperStack.tsx
-src/navigation/TransporterStack.tsx
-src/navigation/types.ts
-src/screens/shipper/ShipperHomeScreen.tsx
-src/screens/shipper/TrackingScreen.tsx
-src/screens/shipper/TrackingScreen.test.tsx
-src/screens/transporter/TrackingScreen.tsx
-src/screens/transporter/TrackingScreen.test.tsx
-src/screens/transporter/TransporterHomeScreen.tsx
-src/state/loadStore.ts
-src/state/notificationStore.ts
-src/state/types.ts
-src/state/vehicleStore.ts
-src/utils/errorMessages.ts
-src/utils/formatters.ts
-```
+This is the most significant open item from this task, larger than F.1/F.2's individually:
 
-## Step 3 — Install / rebuild
+**Neither `MatchResult` nor `AcceptedMatch` (`state/types.ts`) — nor anything else in frontend state, on either role's side — carries an actual counterparty `users.id`.** The `ratings` table's `ratee_id` (technical spec §4) is a `users.id` FK, but:
 
-No new dependencies were added in either task and no native modules were
-touched. **No `expo prebuild` / native rebuild is needed.**
+- **Shipper side:** the only counterparty-scoped identifier available anywhere is `vehicle_id` (from the accepted match). This task's own Dependencies section frames this as intentional ("vehicle_id/transporter identity for the shipper's rating flow"), so `vehicleId` is used as `rateeId` — structurally correct as "the identifier this screen forwards," but not verified to be the real `users.id` the backend expects.
+- **Transporter side:** there is no shipper-identifying value at all in transporter-side frontend state — not even an imperfect one like `vehicle_id`. This is the same pre-existing gap Task E.1 already flagged for route-line/pickup-destination data ("no data source yet exists on the transporter's session… flagged as a forward-looking integration gap"), now surfacing here too. `loadId` is used as a placeholder `rateeId`; both `RatingScreen.tsx` (transporter) and `api/ratings.ts` treat `rateeId` as an opaque string, so nothing is structurally broken by the placeholder — it simply isn't a real user id yet.
 
-```
-cd frontend
-npm install   # optional — no new deps, but harmless to run
-```
+**Suggested resolution to raise with Dinesh:** add an explicit `transporter_id` (and, symmetrically, a `shipper_id` reachable from the transporter's accepted-load state) to the `GET /loads/{id}/matches` and/or `POST /loads/{id}/accept` response shapes, the same way F.1 flagged a schema/endpoint gap and F.2 flagged the missing notifications contract entirely.
 
-## Step 4 — Verify
+Two smaller, already-resolved-by-design items, noted for completeness:
+- The task spec's own "Folder Structure" section shows a top-level `tests/` directory mirroring `src/`; the real repo's established convention is co-located `*.test.tsx` files (confirmed via fresh clone — e.g. `components/EtaBadge.test.tsx`, `screens/shared/CheckpointTimelineScreen.test.tsx`). This delivery follows the real repo's convention, not the spec template's.
+- The task spec names `errorMessages.ts` for the duplicate-rating message; `api/ratings.ts` follows `api/checkpoints.ts`'s exact established pattern for this (`toApiError(code, status)` thrown, `getErrorMessage(err)` read by the screen) rather than the separate `kind`/`message`-object pattern used by `api/loads.ts`/`api/pricing.ts`, since checkpoints.ts is the closer precedent (single low-surface-area POST action) and the task spec's own wording pointed at `errorMessages.ts` specifically.
 
-```
-npm test              # expect: 44 suites, 322 tests, all passing
-npx tsc --noEmit       # expect: no output (clean)
-npx eslint . --ext .ts,.tsx   # expect: only the pre-existing no-color-literals/
-                               # sort-styles pattern on files this delivery
-                               # touches — verified by filtering lint output
-                               # to just this delivery's file list; see
-                               # README.md
-```
+## Verification run (this session)
 
-## What this delivery does NOT include (see README.md for full detail)
-
-- **F.2's notification-endpoint/schema gap, unresolved**: zero REST
-  endpoints for notifications exist anywhere in the technical spec, and
-  no `read`/`read_at` column is defined on the `notifications` table
-  despite this task requiring both. Every route in `api/notifications.ts`
-  is inferred and flagged. This is the single largest open contract item
-  across all of Cluster F so far — surface it to Dinesh first.
-- **F.1's three previously-flagged items, still unresolved**: the
-  checkpoint `status` value set, the missing containers endpoint, and the
-  shipment-document/vehicle-document route path collision.
-- **F.2 does not implement push/local notification handling** —
-  `services/notifications.ts` is deliberately scoped to a list-refresh
-  helper only; see its top-of-file note for why no `expo-notifications`
-  (or similar) dependency was added.
-- **`DocumentChecklistScreen` still has no client-side source for the
-  accepted load's `cargoType`** (F.1, carried over unchanged) —
-  architecturally fine as-is; see README.md.
-- Cluster E's still-outstanding items are unchanged: E.1's performance
-  spike and E.2's manual device-test matrix both still require physical
-  hardware unavailable in any implementation session so far.
+- `tsc --noEmit`: clean
+- `jest`: 47 suites / 343 tests passing (up from the Cluster F baseline of 44/322)
+- `eslint . --ext .ts,.tsx`: 0 new violation categories. Increases confined to `react-native/no-color-literals` (+13, this task's new inline-hex styles, matching the codebase-wide convention) and `@typescript-eslint/no-explicit-any` (+4, one `as any` navigation/route mock per new/modified test file, matching existing test conventions). `react-native/sort-styles`, `@typescript-eslint/no-unused-vars`, `react/no-unescaped-entities`, `@typescript-eslint/no-var-requires` counts unchanged.

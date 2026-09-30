@@ -195,5 +195,10 @@ describe('TrackingScreen (shipper variant)', () => {
 
     fireEvent.press(screen.getByTestId('tracking-container-quick-access'));
     expect(navigation.navigate).toHaveBeenCalledWith('ContainerDetails', { loadId: 'load-1' });
+
+    // Task G.1 — passes vehicleId as rateeId; see RatingScreen.tsx's
+    // top-of-file comment for the ASSUMPTION this rests on.
+    fireEvent.press(screen.getByTestId('tracking-rate-quick-access'));
+    expect(navigation.navigate).toHaveBeenCalledWith('Rating', { loadId: 'load-1', rateeId: 'vehicle-1' });
   });
 });

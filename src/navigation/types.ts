@@ -80,6 +80,16 @@ export type ShipperStackParamList = {
    */
   NotificationInbox: undefined;
   NotificationPreferences: undefined;
+  /**
+   * Task G.1 — post-trip rating, role-specific (screens/shipper/, not
+   * shared) since the rater/ratee direction differs by role. `rateeId` is
+   * ALWAYS supplied by the calling context (TrackingScreen's "Rate"
+   * quick-access button) — never a user-editable value anywhere in the
+   * UI, per the task's explicit security requirement. See
+   * `screens/shipper/RatingScreen.tsx`'s top-of-file comment for what
+   * `rateeId` actually is on this stack (an ASSUMPTION, pending Dinesh).
+   */
+  Rating: { loadId: string; rateeId: string };
 };
 
 /**
@@ -112,4 +122,10 @@ export type TransporterStackParamList = {
   /** Task F.2 — see ShipperStackParamList's matching entry for details. */
   NotificationInbox: undefined;
   NotificationPreferences: undefined;
+  /** Task G.1 — see ShipperStackParamList's matching entry for details.
+   * See `screens/transporter/RatingScreen.tsx`'s top-of-file comment for
+   * what `rateeId` actually is on THIS stack — a different, larger
+   * ASSUMPTION than the shipper side's, since no shipper-identifying
+   * value exists anywhere in the transporter's frontend state yet. */
+  Rating: { loadId: string; rateeId: string };
 };

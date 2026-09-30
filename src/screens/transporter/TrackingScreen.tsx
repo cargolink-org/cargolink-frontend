@@ -169,6 +169,20 @@ export default function TrackingScreen({ route, navigation }: Props) {
     navigation.navigate('ContainerDetails', { loadId });
   };
 
+  // Task G.1 — not in that task's own "Files to Modify" list, added here
+  // anyway for the same reasoning as the shipper variant's matching
+  // comment. `rateeId` is set to `loadId` as a placeholder — see
+  // RatingScreen.tsx's (transporter variant) top-of-file comment: no
+  // shipper-identifying value exists anywhere in the transporter's
+  // frontend state yet, a pre-existing gap this task inherits rather than
+  // introduces (Task E.1 already flagged the same absence for route-line
+  // data). This screen treats `rateeId` as opaque, so the placeholder
+  // doesn't break anything structurally — it just isn't a real user id
+  // until the backend contract supplies one.
+  const handleRateQuickAccess = () => {
+    navigation.navigate('Rating', { loadId, rateeId: loadId });
+  };
+
   // Task E.2 — "Start Trip" shows the permission primer first (UI
   // Requirements: explain WHY before the OS dialog fires), rather than
   // requesting permission directly.
@@ -319,6 +333,14 @@ export default function TrackingScreen({ route, navigation }: Props) {
           testID="tracking-container-quick-access"
         >
           <Text style={styles.shipmentDetailsButtonLabel}>Container details</Text>
+        </Pressable>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleRateQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-rate-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Rate</Text>
         </Pressable>
       </View>
 

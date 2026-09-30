@@ -136,6 +136,18 @@ export default function TrackingScreen({ route, navigation }: Props) {
     navigation.navigate('ContainerDetails', { loadId });
   };
 
+  // Task G.1 — not in that task's own "Files to Modify" list, added here
+  // anyway: its "Navigation dependencies" section names this screen as
+  // the typical entry point, and every other Cluster F/G shared/role
+  // screen so far has been reachable from a real quick-access button here
+  // rather than left registered-but-orphaned (see F.1's identical
+  // reasoning for wiring Documents/Checkpoints/Container above). `vehicleId`
+  // is passed as `rateeId` — see RatingScreen.tsx's top-of-file comment
+  // for the ASSUMPTION this rests on.
+  const handleRateQuickAccess = () => {
+    navigation.navigate('Rating', { loadId, rateeId: vehicleId });
+  };
+
   return (
     <View style={styles.container} testID="shipper-tracking-screen">
       <View style={styles.mapContainer} testID="tracking-map-container">
@@ -212,6 +224,14 @@ export default function TrackingScreen({ route, navigation }: Props) {
           testID="tracking-container-quick-access"
         >
           <Text style={styles.shipmentDetailsButtonLabel}>Container</Text>
+        </Pressable>
+        <Pressable
+          style={styles.shipmentDetailsButton}
+          onPress={handleRateQuickAccess}
+          accessibilityRole="button"
+          testID="tracking-rate-quick-access"
+        >
+          <Text style={styles.shipmentDetailsButtonLabel}>Rate</Text>
         </Pressable>
       </View>
 

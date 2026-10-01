@@ -228,6 +228,44 @@ it first in the next contract-review sync.
 
 ---
 
+## Task G.2 — Admin Dashboard (Web) UI
+
+Completes Cluster G. `AdminStack` now hosts four real screens (`DashboardOverview`, `RoutesHeatmap`, `RevenueView`, `TransporterLeaderboard`), replacing the A.1 placeholder (`AdminHomeScreen.tsx`, deleted).
+
+### Decisions (documented per the task)
+
+- **Web target: React Native Web, same codebase.** `react-native-web` was already a dependency; `expo export --platform web` bundles cleanly with the admin screens. No separate companion build, so there is no extra deploy path. Build: `npx expo export --platform web`.
+- **Charting: no third-party chart library.** Recharts is DOM-only and cannot render inside the RN tree or under jest-expo. Charts are plain RN `View` bars (`components/IntensityBarList.tsx`), which run on native and RN Web and are unit-testable. Swap in a library later by replacing that one component.
+- **"Heatmap" = ranked list with a proportional intensity bar** (the task's allowed alternative). A geographic heatmap is out of scope. Bar width is `value / max` of the rows supplied (presentational); ordering is the backend's and is never re-sorted.
+- **Navigation:** native stack plus a shared nav row (`AdminScreenShell`); no bottom-tabs dependency added.
+- **State:** no `adminStore`. `useAdminQuery` gives each widget local loading/data/error state plus a 60s TTL cache keyed by endpoint+params; every screen has an explicit Refresh that bypasses the cache. Cache is cleared when the role stops being admin.
+- **Role gate:** RootSwitch mounts `AdminStack` only for `admin` (A.1); `AdminStack` re-checks the role and renders nothing otherwise, so no admin fetch can fire for other roles (tested for shipper, transporter and logged-out).
+- **Independent failure:** `AdminWidget` owns loading/error+retry/empty per widget. `DashboardOverview`'s top-routes preview reads `/admin/stats/routes` (not `overview.top_routes`) so an overview failure cannot take it down.
+
+### New files (G.2)
+
+`api/admin.ts`, `utils/numberFormatting.ts`, `validation/dateRange.ts`, `theme/colors.ts`, `components/AdminWidget.tsx`, `components/IntensityBarList.tsx`, `screens/admin/{DashboardOverview,RoutesHeatmap,RevenueView,TransporterLeaderboard,AdminScreenShell}.tsx`, `screens/admin/useAdminQuery.ts`, plus co-located tests for each.
+
+### Files modified / removed (G.2)
+
+`navigation/AdminStack.tsx` (real implementation + role re-check), `navigation/types.ts` (`AdminStackParamList`), `navigation/__tests__/RootSwitch.test.tsx` (mocks admin API; admin case asserts the real dashboard; shipper case asserts no admin fetch). Removed: `screens/admin/AdminHomeScreen.tsx`.
+
+### Assumptions flagged for Dinesh (G.2)
+
+Only `GET /admin/stats/overview` exists in the spec. Everything else is inferred and isolated in `api/admin.ts`:
+
+1. `GET /admin/stats/routes -> [{route, shipment_count}]`
+2. `GET /admin/stats/revenue?from=&to= -> {by_route:[{route,revenue}], by_period:[{period,revenue}]}` (period label format undefined)
+3. `GET /admin/stats/transporters/leaderboard -> [{transporter_id,name,rating_avg,completed_trips}]`
+4. Overview has no `cancelled` count in the spec; typed optional, tile hidden if absent.
+5. The source doc mentions a delayed-shipments list; the contract only gives a `delayed` count, so only the count is shown.
+6. `overview.top_routes` is typed but unused by the UI (see independent-failure note); confirm whether it should stay.
+7. Revenue is assumed to be whole rupees.
+
+### Tests (G.2)
+
+387/387 passing across 54 suites (from 343/47), `tsc --noEmit` clean, web export bundles. Test location is co-located (repo convention), not the spec's top-level `tests/` mirror. Mock empty variant: `getAdminRevenue` with `from === MOCK_EMPTY_RANGE_FROM`; other empty/failure cases mock the api module.
+
 ## What's flagged but deliberately NOT fixed (Cluster F, out of scope)
 
 - No fix applied to any pre-existing `no-color-literals`/`sort-styles`

@@ -4,6 +4,11 @@ import { NavigationContainer } from '@react-navigation/native';
 
 import { RootSwitch } from '../RootSwitch';
 import { useAuthStore } from '../../state/authStore';
+import { getAdminOverview, getAdminRoutes } from '../../api/admin';
+
+// AdminStack (Task G.2) now renders the real dashboard, which fetches on
+// mount — mocked so the routing tests stay network-free.
+jest.mock('../../api/admin');
 
 /**
  * Rewritten as part of Task E.1.
@@ -54,6 +59,14 @@ function renderRootSwitch() {
 describe('RootSwitch', () => {
   beforeEach(() => {
     resetAuthStore();
+    (getAdminOverview as jest.Mock).mockResolvedValue({
+      active: 0,
+      completed: 0,
+      delayed: 0,
+      revenue: 0,
+      top_routes: [],
+    });
+    (getAdminRoutes as jest.Mock).mockResolvedValue([]);
   });
 
   it('routes to AuthStack when there is no authenticated session', async () => {
@@ -68,6 +81,9 @@ describe('RootSwitch', () => {
     renderRootSwitch();
 
     expect(await screen.findByText('Shipper Home — Placeholder')).toBeTruthy();
+    // Non-admin roles never reach the admin dashboard nor trigger its fetches.
+    expect(screen.queryByTestId('widget-status')).toBeNull();
+    expect(getAdminOverview).not.toHaveBeenCalled();
   });
 
   it('routes to TransporterStack for an authenticated transporter session', async () => {
@@ -86,7 +102,8 @@ describe('RootSwitch', () => {
 
     renderRootSwitch();
 
-    expect(await screen.findByText('Admin stack placeholder (A.1)')).toBeTruthy();
+    // Task G.2 — the real admin dashboard replaced the A.1 placeholder.
+    expect(await screen.findByTestId('widget-status')).toBeTruthy();
   });
 
   it('treats an authenticated session with a missing/invalid role as logged out, without crashing', async () => {

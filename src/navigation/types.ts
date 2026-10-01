@@ -129,3 +129,15 @@ export type TransporterStackParamList = {
    * value exists anywhere in the transporter's frontend state yet. */
   Rating: { loadId: string; rateeId: string };
 };
+
+/**
+ * Task G.2 — admin stack (web-rendered dashboard). No required params:
+ * date-range filters on RevenueView are local screen state, not route
+ * state, so the four views stay independently reachable and cacheable.
+ */
+export type AdminStackParamList = {
+  DashboardOverview: undefined;
+  RoutesHeatmap: undefined;
+  RevenueView: undefined;
+  TransporterLeaderboard: undefined;
+};
